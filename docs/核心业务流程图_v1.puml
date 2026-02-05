@@ -1,0 +1,151 @@
+@startuml AI心理医生MVP核心业务流程图_v1
+
+skinparam backgroundColor #FEFEFE
+skinparam handwritten false
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+
+title AI心理医生MVP核心业务流程图 (第一版)
+
+' 定义样式
+skinparam participant {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+    FontColor #0D47A1
+}
+skinparam actor {
+    BackgroundColor #E8F5E9
+    BorderColor #388E3C
+    FontColor #1B5E20
+}
+
+actor "用户" as User
+participant "前端界面" as Frontend
+participant "API网关" as APIGateway
+participant "对话服务" as ChatService
+participant "情绪识别服务" as EmotionService
+participant "建议生成服务" as SuggestionService
+participant "预警服务" as AlertService
+participant "评估服务" as AssessmentService
+database "数据库" as Database
+
+== 用户注册与认证流程 ==
+
+User -> Frontend: 打开应用
+Frontend -> User: 展示欢迎页面和免责声明
+User -> Frontend: 同意协议
+Frontend -> APIGateway: 生成匿名ID
+APIGateway -> Database: 保存用户信息
+Database --> APIGateway: 返回用户ID
+APIGateway --> Frontend: 返回匿名ID
+Frontend -> User: 进入主界面
+
+== 对话交互流程 ==
+
+User -> Frontend: 输入消息
+Frontend -> APIGateway: 发送消息请求
+APIGateway -> ChatService: 转发消息
+ChatService -> EmotionService: 分析情绪
+EmotionService -> EmotionService: 识别基本情绪
+EmotionService -> EmotionService: 识别复合情绪
+EmotionService -> EmotionService: 判断情绪强度
+EmotionService --> ChatService: 返回情绪结果
+
+ChatService -> AlertService: 检查风险
+AlertService -> AlertService: 匹配高危关键词
+AlertService -> AlertService: 匹配绝望关键词
+alt 检测到一级预警
+    AlertService --> ChatService: 返回一级预警
+    ChatService -> Frontend: 返回预警信息
+    Frontend -> User: 展示紧急资源
+else 检测到二级预警
+    AlertService --> ChatService: 返回二级预警
+    ChatService -> Frontend: 返回预警信息
+    Frontend -> User: 插入预警提示
+else 检测到三级预警
+    AlertService --> ChatService: 返回三级预警
+    ChatService -> Frontend: 返回预警信息
+else 无风险
+    AlertService --> ChatService: 返回无风险
+end
+
+ChatService -> SuggestionService: 生成建议
+SuggestionService -> SuggestionService: 匹配情绪类型
+SuggestionService -> SuggestionService: 匹配情绪强度
+SuggestionService --> ChatService: 返回建议列表
+
+ChatService -> ChatService: 生成共情回应
+ChatService -> Database: 保存对话记录
+Database --> ChatService: 保存成功
+ChatService -> APIGateway: 返回响应
+APIGateway -> Frontend: 返回响应
+Frontend -> User: 展示AI回应
+
+== 心理评估流程 ==
+
+User -> Frontend: 选择评估类型
+Frontend -> APIGateway: 请求量表
+APIGateway -> AssessmentService: 获取量表
+AssessmentService -> AssessmentService: 查询量表配置
+AssessmentService --> APIGateway: 返回量表
+APIGateway -> Frontend: 返回量表
+Frontend -> User: 展示评估说明
+
+User -> Frontend: 逐题作答
+Frontend -> Frontend: 显示进度条
+User -> Frontend: 完成所有题目
+Frontend -> APIGateway: 提交答案
+APIGateway -> AssessmentService: 提交评估
+AssessmentService -> AssessmentService: 计算得分
+AssessmentService -> AssessmentService: 确定等级
+AssessmentService -> Database: 保存评估结果
+Database --> AssessmentService: 保存成功
+AssessmentService -> SuggestionService: 生成建议
+SuggestionService --> AssessmentService: 返回建议
+AssessmentService -> APIGateway: 返回评估报告
+APIGateway -> Frontend: 返回报告
+Frontend -> User: 展示结果和建议
+
+== 预警触发流程 ==
+
+ChatService -> AlertService: 实时监控
+AlertService -> AlertService: 检测风险信号
+AlertService -> AlertService: 判断预警级别
+
+alt 一级预警(紧急)
+    AlertService -> Database: 记录预警事件
+    AlertService -> Frontend: 立即中断对话
+    Frontend -> User: 展示紧急资源
+    Frontend -> User: 推荐专业帮助
+else 二级预警(高危)
+    AlertService -> Database: 记录预警事件
+    AlertService -> Frontend: 插入预警提示
+    Frontend -> User: 提供危机热线
+    Frontend -> User: 建议专业帮助
+else 三级预警(关注)
+    AlertService -> Database: 记录预警事件
+    AlertService -> Frontend: 对话结束后展示
+    Frontend -> User: 提供心理支持
+    Frontend -> User: 建议进行评估
+end
+
+AlertService -> AlertService: 定期跟进用户状态
+
+== 数据管理流程 ==
+
+User -> Frontend: 查看数据
+Frontend -> APIGateway: 请求数据
+APIGateway -> Database: 查询数据
+Database --> APIGateway: 返回数据
+APIGateway -> Frontend: 返回数据
+Frontend -> User: 展示数据
+
+User -> Frontend: 删除数据
+Frontend -> User: 确认删除
+Frontend -> APIGateway: 请求删除
+APIGateway -> Database: 删除数据
+Database --> APIGateway: 删除成功
+APIGateway -> Frontend: 返回结果
+Frontend -> User: 提示删除成功
+
+@enduml

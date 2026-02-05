@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "id": "ISSUE_EXAMPLE_HIGH_001",
+      "title": "Real-time emotion detection with ML model",
+      "module": "emotion-recognition",
+      "difficulty": "high",
+      "category": "features",
+      "severity": "critical",
+      "status": "resolved",
+      "created": "2026-02-06",
+      "updated": "2026-02-06",
+      "tags": ["emotion", "ml", "bert", "performance", "accuracy"],
+      "keywords": ["emotion detection", "ml model", "bert", "accuracy", "real-time", "multi-label"],
+      "file_path": "examples/high_difficulty_example.md"
+    }
+  ],
+  "metadata": {
+    "total_entries": 1,
+    "last_updated": "2026-02-06",
+    "version": "1.0"
+  }
+}
