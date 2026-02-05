@@ -1,0 +1,146 @@
+@startuml AI心理医生MVP用户注册与认证流程_v3
+
+skinparam backgroundColor #FEFEFE
+skinparam handwritten false
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+
+title AI心理医生MVP用户注册与认证流程 (第三版)
+
+skinparam participant {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+    FontColor #0D47A1
+}
+skinparam actor {
+    BackgroundColor #E8F5E9
+    BorderColor #388E3C
+    FontColor #1B5E20
+}
+skinparam database {
+    BackgroundColor #FFF3E0
+    BorderColor #F57C00
+    FontColor #E65100
+}
+
+actor "用户" as User
+participant "前端界面" as Frontend
+participant "CDN" as CDN
+participant "安全层\n(HTTPS/JWT)" as Security
+participant "API网关\n(限流/熔断)" as APIGateway
+participant "用户服务" as UserService
+database "数据库\n(PostgreSQL)" as Database
+database "缓存\n(Redis)" as Cache
+
+== 首次注册流程 ==
+
+User -> Frontend: 打开应用
+Frontend -> CDN: 请求静态资源
+CDN --> Frontend: 返回静态资源
+Frontend -> User: 展示欢迎页面
+Frontend -> User: 展示免责声明
+User -> Frontend: 同意协议
+Frontend -> Security: 生成匿名ID请求
+Security -> Security: 生成设备指纹
+Security -> APIGateway: 创建用户请求
+APIGateway -> APIGateway: 检查限流
+alt 超过限流阈值
+    APIGateway --> Frontend: 返回限流错误(429)
+    Frontend -> User: 提示稍后再试
+else 未超过限流
+    APIGateway -> UserService: 创建匿名用户
+    UserService -> Database: 保存用户信息
+    Database --> UserService: 保存成功
+    UserService --> APIGateway: 返回用户ID
+    APIGateway --> Security: 返回用户ID
+    Security -> Security: 生成JWT Token\n(过期时间: 24小时)
+    Security --> Frontend: 返回Token和用户ID
+    Frontend -> Cache: 缓存用户会话\n(TTL: 30分钟)
+    Frontend -> User: 进入主界面
+end
+
+== Token刷新流程 ==
+
+Frontend -> Security: 验证JWT Token
+alt Token即将过期(剩余<1小时)
+    Security -> APIGateway: 刷新Token请求
+    APIGateway -> UserService: 验证用户身份
+    UserService -> Database: 查询用户信息
+    Database --> UserService: 返回用户信息
+    UserService --> APIGateway: 返回验证结果
+    APIGateway --> Security: 返回验证结果
+    Security -> Security: 生成新Token
+    Security --> Frontend: 返回新Token
+    Frontend -> Cache: 更新会话缓存
+else Token已过期
+    Security --> Frontend: 返回Token过期错误
+    Frontend -> User: 提示重新登录
+    Frontend -> Frontend: 清除本地缓存
+    User -> Frontend: 重新打开应用
+else Token有效
+    Security --> Frontend: 验证通过
+end
+
+== 跨设备同步流程 ==
+
+User -> Frontend: 在新设备登录
+Frontend -> Security: 验证身份
+Security -> APIGateway: 获取用户数据请求
+APIGateway -> UserService: 获取用户数据
+UserService -> Database: 查询用户数据
+Database --> UserService: 返回用户数据
+UserService --> APIGateway: 返回用户数据
+APIGateway --> Security: 返回用户数据
+Security -> Security: 生成新Token
+Security --> Frontend: 返回用户数据和新Token
+Frontend -> Cache: 同步数据到缓存
+Frontend -> User: 展示同步数据
+
+== 退出登录流程 ==
+
+User -> Frontend: 退出登录
+Frontend -> Cache: 清除会话缓存
+Cache --> Frontend: 清除成功
+Frontend -> Frontend: 清除本地Token
+Frontend -> User: 返回欢迎页面
+
+== 异常处理流程 ==
+
+alt API调用失败
+    APIGateway -> APIGateway: 检查熔断器状态
+    alt 熔断器开启
+        APIGateway --> Frontend: 返回降级响应
+        Frontend -> User: 提示服务暂时不可用
+    else 熔断器关闭
+        APIGateway -> APIGateway: 重试请求(最多3次)
+        alt 重试成功
+            APIGateway --> Frontend: 返回正常响应
+        else 重试失败
+            APIGateway -> APIGateway: 触发熔断器
+            APIGateway --> Frontend: 返回降级响应
+            Frontend -> User: 提示服务暂时不可用
+        end
+    end
+end
+
+alt 数据库连接失败
+    UserService -> UserService: 切换到备用数据库
+    alt 备用数据库可用
+        UserService --> APIGateway: 返回正常响应
+    else 备用数据库不可用
+        UserService --> APIGateway: 返回错误提示
+        APIGateway --> Frontend: 返回错误提示
+        Frontend -> User: 提示稍后重试
+    end
+end
+
+alt 网络超时
+    Frontend -> Frontend: 重试请求(最多3次)
+    alt 重试成功
+        Frontend -> User: 正常操作
+    else 重试失败
+        Frontend -> User: 提示网络超时
+    end
+end
+
+@enduml

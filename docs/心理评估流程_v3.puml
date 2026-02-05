@@ -1,0 +1,232 @@
+@startuml AI心理医生MVP心理评估流程_v3
+
+skinparam backgroundColor #FEFEFE
+skinparam handwritten false
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+
+title AI心理医生MVP心理评估流程 (第三版)
+
+skinparam participant {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+    FontColor #0D47A1
+}
+skinparam database {
+    BackgroundColor #FFF3E0
+    BorderColor #F57C00
+    FontColor #E65100
+}
+
+actor "用户" as User
+participant "前端界面" as Frontend
+participant "安全层" as Security
+participant "API网关" as APIGateway
+participant "评估服务" as AssessmentService
+participant "预警服务" as AlertService
+participant "建议生成服务" as SuggestionService
+participant "用户服务" as UserService
+participant "通知服务" as NotificationService
+participant "异步任务队列" as AsyncTaskQueue
+database "数据库\n(PostgreSQL)" as Database
+database "缓存\n(Redis)" as Cache
+
+== 评估准备流程 ==
+
+User -> Frontend: 选择评估类型
+Frontend -> Security: 验证JWT Token
+Security --> Frontend: 验证通过
+Frontend -> APIGateway: 请求量表
+APIGateway -> AssessmentService: 获取量表
+AssessmentService -> Cache: 检查量表缓存
+alt 缓存命中
+    Cache --> AssessmentService: 返回量表
+else 缓存未命中
+    AssessmentService -> Database: 查询量表配置
+    Database --> AssessmentService: 返回量表
+    AssessmentService -> Cache: 缓存量表配置\n(TTL: 24小时)
+end
+AssessmentService --> APIGateway: 返回量表
+APIGateway --> Frontend: 返回量表
+Frontend -> User: 展示评估说明和免责声明
+User -> Frontend: 确认开始评估
+
+== 频率检查流程 ==
+
+Frontend -> APIGateway: 检查评估频率
+APIGateway -> AssessmentService: 检查评估频率
+AssessmentService -> UserService: 查询评估历史
+UserService -> Database: 查询评估记录
+Database --> UserService: 返回评估记录
+UserService -> UserService: 检查评估频率\n(每周最多1次)
+UserService --> AssessmentService: 返回频率检查结果
+alt 超过频率限制
+    AssessmentService --> Frontend: 返回频率超限提示
+    Frontend -> User: 提示每周只能评估一次
+    Frontend -> User: 显示上次评估时间
+else 未超过频率限制
+    AssessmentService --> Frontend: 返回允许评估
+    Frontend -> User: 开始答题
+end
+
+== 评估答题流程 ==
+
+Frontend -> User: 展示第1题
+User -> Frontend: 选择答案
+Frontend -> Frontend: 显示进度条
+Frontend -> User: 展示第2题
+loop 逐题作答
+    User -> Frontend: 选择答案
+    Frontend -> Frontend: 临时保存答案
+end
+User -> Frontend: 完成所有题目
+
+alt 用户中途退出
+    Frontend -> AssessmentService: 保存草稿
+    AssessmentService -> Database: 保存草稿
+    Database --> AssessmentService: 保存成功
+    AssessmentService --> Frontend: 返回草稿保存成功
+    Frontend -> User: 提示可继续完成
+    Frontend -> User: 显示继续评估按钮
+end
+
+== 评估提交与处理流程 ==
+
+Frontend -> APIGateway: 提交答案
+APIGateway -> AssessmentService: 提交评估
+AssessmentService -> AssessmentService: 计算得分
+AssessmentService -> AssessmentService: 确定等级
+
+alt 评估结果异常
+    AssessmentService -> AlertService: 检查风险
+    AlertService -> AlertService: 判断预警级别
+    alt PHQ-9得分≥15或GAD-7得分≥15
+        AlertService -> Database: 记录预警事件
+        AlertService -> NotificationService: 触发预警通知
+        NotificationService -> AsyncTaskQueue: 发送通知\n(优先级: 高)
+        AsyncTaskQueue -> NotificationService: 发送成功
+        AlertService --> AssessmentService: 返回二级预警
+    else 多次评估结果恶化
+        AlertService -> Database: 记录预警事件
+        AlertService --> AssessmentService: 返回三级预警
+    else 评估结果正常
+        AlertService --> AssessmentService: 返回无风险
+    end
+end
+
+AssessmentService -> Database: 保存评估结果
+Database --> AssessmentService: 保存成功
+AssessmentService -> Database: 保存评估答案
+Database --> AssessmentService: 保存成功
+
+== 建议生成与报告生成流程 ==
+
+AssessmentService -> SuggestionService: 生成建议
+SuggestionService -> SuggestionService: 分析评估结果
+SuggestionService -> SuggestionService: 匹配建议类型
+SuggestionService -> SuggestionService: 生成个性化建议
+SuggestionService --> AssessmentService: 返回建议列表(最多5条)
+
+AssessmentService -> AssessmentService: 生成评估报告
+AssessmentService -> AssessmentService: 生成结果解释
+AssessmentService -> AssessmentService: 生成应对建议
+AssessmentService -> AssessmentService: 生成专业资源推荐
+
+alt 评估结果需要专业帮助
+    AssessmentService -> AssessmentService: 添加专业资源推荐
+    AssessmentService -> Database: 保存报告
+    Database --> AssessmentService: 保存成功
+else 评估结果正常
+    AssessmentService -> Database: 保存报告
+    Database --> AssessmentService: 保存成功
+end
+
+AssessmentService --> APIGateway: 返回评估报告
+APIGateway --> Frontend: 返回报告
+Frontend -> User: 展示评估结果
+Frontend -> User: 展示结果等级
+Frontend -> User: 展示结果解释
+Frontend -> User: 展示应对建议
+Frontend -> User: 展示专业资源(如有)
+
+== 报告保存与分享流程 ==
+
+User -> Frontend: 保存报告
+Frontend -> APIGateway: 保存报告请求
+APIGateway -> AssessmentService: 保存报告
+AssessmentService -> Database: 更新报告保存状态
+Database --> AssessmentService: 更新成功
+AssessmentService --> Frontend: 返回保存成功
+Frontend -> User: 提示报告已保存
+
+User -> Frontend: 分享报告
+Frontend -> APIGateway: 生成分享链接
+APIGateway -> AssessmentService: 生成分享链接
+AssessmentService -> Database: 保存分享记录
+Database --> AssessmentService: 保存成功
+AssessmentService --> APIGateway: 返回分享链接
+APIGateway --> Frontend: 返回分享链接
+Frontend -> User: 展示分享链接
+
+== 异常处理流程 ==
+
+alt API调用失败
+    APIGateway -> APIGateway: 检查熔断器状态
+    alt 熔断器开启
+        APIGateway --> Frontend: 返回降级响应
+        Frontend -> User: 提示服务暂时不可用
+    else 熔断器关闭
+        APIGateway -> APIGateway: 重试请求(最多3次)
+        alt 重试成功
+            APIGateway --> Frontend: 返回正常响应
+        else 重试失败
+            APIGateway -> APIGateway: 触发熔断器
+            APIGateway --> Frontend: 返回降级响应
+            Frontend -> User: 提示服务暂时不可用
+        end
+    end
+end
+
+alt 数据库写入失败
+    AssessmentService -> AsyncTaskQueue: 异步重试写入
+    AsyncTaskQueue -> Database: 重试写入
+    alt 重试成功
+        AsyncTaskQueue -> AssessmentService: 写入成功
+    else 重试失败
+        AsyncTaskQueue -> AssessmentService: 写入失败
+        AssessmentService -> Frontend: 返回错误提示
+        Frontend -> User: 提示稍后重试
+    end
+end
+
+alt 评估计算异常
+    AssessmentService -> AssessmentService: 使用默认计算逻辑
+    AssessmentService -> Database: 记录异常日志
+    AssessmentService --> Frontend: 返回评估结果
+    Frontend -> User: 展示评估结果
+    Frontend -> User: 提示结果可能存在偏差
+end
+
+== 评估历史查看流程 ==
+
+User -> Frontend: 查看评估历史
+Frontend -> APIGateway: 请求评估历史
+APIGateway -> AssessmentService: 获取评估历史
+AssessmentService -> Database: 查询评估记录
+Database --> AssessmentService: 返回评估记录
+AssessmentService -> AssessmentService: 生成趋势分析
+AssessmentService --> APIGateway: 返回评估历史
+APIGateway --> Frontend: 返回评估历史
+Frontend -> User: 展示评估历史列表
+Frontend -> User: 展示评估趋势图
+
+User -> Frontend: 查看历史报告
+Frontend -> APIGateway: 请求历史报告
+APIGateway -> AssessmentService: 获取历史报告
+AssessmentService -> Database: 查询报告
+Database --> AssessmentService: 返回报告
+AssessmentService --> APIGateway: 返回报告
+APIGateway --> Frontend: 返回报告
+Frontend -> User: 展示历史报告
+
+@enduml
