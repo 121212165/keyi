@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Button, Radio, Progress, message, Select } from 'antd'
+import { Card, Button, Radio, Progress, Select } from 'antd'
 
 const { Option } = Select
 
