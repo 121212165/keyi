@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 
 class Settings(BaseSettings):
@@ -16,10 +17,19 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None  # Anthropic API密钥
     ENVIRONMENT: str = "development"  # 运行环境
     LOG_LEVEL: str = "INFO"  # 日志级别
+    SUPABASE_URL: Optional[str] = None  # Supabase项目URL
+    SUPABASE_KEY: Optional[str] = None  # Supabase anon key
+    SUPABASE_SERVICE_KEY: Optional[str] = None  # Supabase service role key
+    ZHIPU_API_KEY: Optional[str] = None  # 智谱AI API密钥
 
     class Config:
         """配置类"""
         env_file = ".env"  # 环境变量文件路径
+        env_file_encoding = "utf-8"  # 明确指定编码
+        extra = "ignore"  # 忽略额外字段
 
 
-settings = Settings()  # 创建配置实例
+# 立即加载环境变量
+settings = Settings(
+    _env_file=os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+)
