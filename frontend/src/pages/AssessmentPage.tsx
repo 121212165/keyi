@@ -1,6 +1,5 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Card, Button, Radio, Progress, message, Select } from 'antd'
-import { api } from '../api'
 
 const { Option } = Select
 
@@ -85,14 +84,32 @@ export default function AssessmentPage() {
 
   const handleSubmit = async (finalAnswers: number[]) => {
     setLoading(true)
-    try {
-      const data = await api.assessment.submitAssessment(scaleType, finalAnswers)
-      setResult(data)
-    } catch (error) {
-      message.error('提交评估失败，请重试')
-    } finally {
-      setLoading(false)
+    // 本地计算结果（MVP阶段不需要后端）
+    const score = finalAnswers.reduce((a, b) => a + b, 0)
+    let level = ''
+    let description = ''
+
+    if (scaleType === 'phq_9') {
+      if (score <= 4) { level = '无或极轻微抑郁'; description = '你的抑郁症状很少或没有。继续保持积极的生活方式。' }
+      else if (score <= 9) { level = '轻度抑郁'; description = '你有轻微的抑郁症状。建议多与朋友交流，适当运动。' }
+      else if (score <= 14) { level = '中度抑郁'; description = '你有一些抑郁症状。如果持续影响生活，建议寻求专业帮助。' }
+      else if (score <= 19) { level = '中重度抑郁'; description = '你的抑郁症状较为明显。建议尽快咨询心理健康专业人士。' }
+      else { level = '重度抑郁'; description = '你的抑郁症状严重。请立即寻求专业心理帮助。' }
+    } else if (scaleType === 'gad_7') {
+      if (score <= 4) { level = '无焦虑'; description = '你没有明显的焦虑症状。' }
+      else if (score <= 9) { level = '轻度焦虑'; description = '你有轻微的焦虑症状。深呼吸和放松练习可能有所帮助。' }
+      else if (score <= 14) { level = '中度焦虑'; description = '你的焦虑症状较为明显。建议学习压力管理技巧。' }
+      else { level = '重度焦虑'; description = '你的焦虑症状严重。请寻求专业帮助。' }
+    } else {
+      if (score <= 13) { level = '低压力'; description = '你的压力水平较低。继续保持良好的生活习惯。' }
+      else if (score <= 26) { level = '中等压力'; description = '你有一定的压力。尝试一些放松和减压方法。' }
+      else { level = '高压力'; description = '你的压力水平较高。建议花时间照顾自己，必要时寻求支持。' }
     }
+
+    setTimeout(() => {
+      setResult({ score, level, description })
+      setLoading(false)
+    }, 500)
   }
 
   const handleReset = () => {
@@ -109,7 +126,8 @@ export default function AssessmentPage() {
           <div style={{ fontSize: '48px', color: '#1890ff', margin: '20px 0' }}>
             {result.score}
           </div>
-          <h3 style={{ marginBottom: '30px' }}>{result.level}</h3>
+          <h3 style={{ marginBottom: '10px' }}>{result.level}</h3>
+          <p style={{ color: '#666', marginBottom: '30px' }}>{result.description}</p>
           <Button type="primary" onClick={handleReset}>
             重新评估
           </Button>

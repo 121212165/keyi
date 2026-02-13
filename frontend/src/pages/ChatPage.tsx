@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Input, Button, List, Card, message, Modal } from 'antd'
 import { SendOutlined } from '@ant-design/icons'
 import { api } from '../api'
