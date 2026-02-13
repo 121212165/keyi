@@ -1,5 +1,7 @@
 # AI心理医生 MVP - 项目总览
 
+[![GitHub仓库](https://img.shields.io/badge/GitHub-仓库-blue?style=flat-square)](https://github.com/121212165/keyi)
+
 ## 项目简介
 
 AI心理医生是一款基于人工智能技术的心理健康辅助应用，旨在为用户提供基础的心理咨询对话服务。本项目采用测试驱动开发（TDD）方法论，确保代码质量和功能稳定性。
