@@ -3,6 +3,7 @@ from datetime import datetime
 from app.schemas import Message, ChatSession, EmotionResult
 from app.services.emotion_service import EmotionRecognitionEngine
 from app.services.alert_service import AlertService
+from app.services.llm_service import llm_service
 
 
 class ChatService:
@@ -11,6 +12,7 @@ class ChatService:
         self.alert_service = AlertService()
         self.sessions: Dict[str, ChatSession] = {}
         self.message_counter = 0
+        self.use_llm = True  # MVP: 使用LLM生成回复
 
     async def create_session(self, user_id: str) -> str:
         session_id = f"session_{datetime.now().strftime('%Y%m%d%H%M%S')}_{user_id}"
@@ -99,8 +101,19 @@ class ChatService:
     async def _generate_response(
         self, user_message: str, emotion: EmotionResult, history: List[Message]
     ) -> str:
+        # MVP: 使用LLM生成回复
+        if self.use_llm:
+            # 转换历史消息格式
+            history_dicts = []
+            for msg in history:
+                history_dicts.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            return await llm_service.chat(user_message, history_dicts)
+
+        # 备用：使用模板回复
         primary_emotion = emotion.primary_emotion.value
-        intensity = emotion.intensity.value
 
         response_templates = {
             "joy": [
