@@ -1,6 +1,6 @@
 """
 LLM服务 - MVP版本
-使用OpenAI API生成对话回复
+支持 OpenAI 和 智谱AI
 """
 
 import os
@@ -35,31 +35,69 @@ SYSTEM_PROMPT = """你是一个温暖、专业AI心理陪伴助手，名为"可�
 
 
 class LLMService:
-    """简单的LLM服务"""
+    """支持多种LLM的服务"""
 
     def __init__(self):
-        self.api_key = settings.OPENAI_API_KEY or ""
+        # 智谱AI配置
+        self.zhipu_api_key = os.getenv("ZHIPU_API_KEY", "")
+        # OpenAI配置
+        self.openai_api_key = settings.OPENAI_API_KEY or ""
         self.model = settings.OPENAI_MODEL
         self.base_url = settings.OPENAI_BASE_URL
 
     async def chat(self, message: str, history: List[Dict] = None) -> str:
-        """生成回复
+        """生成回复"""
+        # 优先使用智谱AI
+        if self.zhipu_api_key:
+            try:
+                return await self._call_zhipu(message, history or [])
+            except Exception as e:
+                print(f"智谱AI调用失败: {e}")
 
-        Args:
-            message: 用户最新消息
-            history: 对话历史
+        # 备用OpenAI
+        if self.openai_api_key:
+            try:
+                return await self._call_openai(message, history or [])
+            except Exception as e:
+                print(f"OpenAI调用失败: {e}")
 
-        Returns:
-            AI回复内容
-        """
-        if not self.api_key:
-            return self._fallback_response(message)
+        # 都没有就用本地回复
+        return self._fallback_response(message)
 
-        try:
-            return await self._call_openai(message, history or [])
-        except Exception as e:
-            print(f"LLM调用失败: {e}")
-            return self._fallback_response(message)
+    async def _call_zhipu(self, message: str, history: List[Dict]) -> str:
+        """调用智谱AI API"""
+        import httpx
+
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+        for msg in history[-10:]:
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+
+        messages.append({"role": "user", "content": message})
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.zhipu_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "glm-4-flash",
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 500
+                }
+            )
+
+            if response.status_code != 200:
+                raise Exception(f"智谱API错误: {response.status_code}")
+
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
 
     async def _call_openai(self, message: str, history: List[Dict]) -> str:
         """调用OpenAI API"""
@@ -67,21 +105,19 @@ class LLMService:
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-        # 添加历史消息
-        for msg in history[-10:]:  # 只保留最近10条
+        for msg in history[-10:]:
             messages.append({
                 "role": msg.get("role", "user"),
                 "content": msg.get("content", "")
             })
 
-        # 添加当前消息
         messages.append({"role": "user", "content": message})
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "Authorization": f"Bearer {self.openai_api_key}",
                     "Content-Type": "application/json"
                 },
                 json={
@@ -93,7 +129,7 @@ class LLMService:
             )
 
             if response.status_code != 200:
-                return self._fallback_response(message)
+                raise Exception(f"OpenAI API错误: {response.status_code}")
 
             result = response.json()
             return result["choices"][0]["message"]["content"]
@@ -102,7 +138,6 @@ class LLMService:
         """当API不可用时的默认回复"""
         message_lower = message.lower()
 
-        # 简单的关键词响应
         if any(word in message_lower for word in ["累", "压力", "焦虑", "烦"]):
             return "我听到你感觉很疲惫。能够说说是什么让你感到这么累吗？"
 
@@ -115,9 +150,7 @@ class LLMService:
         if any(word in message_lower for word in ["谢谢", "感谢", "好"]):
             return "不用谢。我在这里陪你。还想聊些什么吗？"
 
-        # 默认回复
         return "我在这里听你说。如果愿意的话，可以多说说你的想法和感受。"
 
 
-# 全局实例
 llm_service = LLMService()
