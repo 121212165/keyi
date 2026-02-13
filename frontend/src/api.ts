@@ -3,12 +3,6 @@
 
 const API_BASE_URL = (import.meta as unknown as { env: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL || '/api'
 
-interface RequestOptions {
-  method?: string
-  body?: string
-  headers?: Record<string, string>
-}
-
 async function request(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${endpoint}`
   const defaultOptions: RequestInit = {
