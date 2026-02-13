@@ -15,9 +15,6 @@
       "dest": "/api/index.py"
     }
   ],
-  "env": {
-    "ZHIPU_API_KEY": "@zhipu_api_key",
-    "OPENAI_API_KEY": "@openai_api_key"
-  },
+  "env": {},
   "crons": []
 }
