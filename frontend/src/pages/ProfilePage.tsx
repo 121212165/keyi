@@ -1,9 +1,9 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Card, List, Tag, Button, message } from 'antd'
 import EmotionTrend from '../components/EmotionTrend'
 
 export default function ProfilePage() {
-  const [assessments, setAssessments] = useState([
+  const [assessments] = useState([
     {
       id: '1',
       scale_type: 'PHQ-9',
