@@ -4,11 +4,6 @@
   "outputDirectory": "frontend/dist",
   "devCommand": "cd frontend && npm run dev",
   "installCommand": "npm install",
-  "functions": {
-    "api/**/*.py": {
-      "runtime": "python3.12"
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
