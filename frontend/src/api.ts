@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 export const api = {
   baseUrl: API_BASE_URL,
@@ -14,7 +14,7 @@ export const api = {
 
     try {
       const response = await fetch(url, { ...defaultOptions, ...options })
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -28,70 +28,26 @@ export const api = {
 
   chat: {
     async createSession() {
-      return this.request('/api/v1/chat/sessions', {
+      return this.request('/api/chat/sessions', {
         method: 'POST',
       })
     },
 
     async sendMessage(sessionId: string, message: string) {
-      return this.request(`/api/v1/chat/sessions/${sessionId}/messages`, {
+      return this.request(`/api/chat/sessions/${sessionId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, session_id: sessionId }),
       })
     },
 
     async getHistory(sessionId: string) {
-      return this.request(`/api/v1/chat/sessions/${sessionId}/history`)
+      return this.request(`/api/chat/sessions/${sessionId}/history`)
     },
   },
 
-  emotion: {
-    async analyze(text: string) {
-      return this.request('/api/v1/emotion/analyze', {
-        method: 'POST',
-        body: JSON.stringify({ text }),
-      })
-    },
-  },
-
-  assessment: {
-    async getScale(scaleType: string) {
-      return this.request(`/api/v1/assessments/scales/${scaleType}`)
-    },
-
-    async submitAssessment(scaleType: string, answers: number[]) {
-      return this.request('/api/v1/assessments/submissions', {
-        method: 'POST',
-        body: JSON.stringify({
-          scale_type: scaleType,
-          answers,
-        }),
-      })
-    },
-  },
-
-  suggestion: {
-    async generate(emotion: string, intensity: string) {
-      return this.request('/api/v1/suggestions/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-          emotion,
-          intensity,
-        }),
-      })
-    },
-  },
-
-  alert: {
-    async getResources(alertType: string) {
-      return this.request(`/api/v1/alerts/resources?alert_type=${alertType}`)
-    },
-
-    async trigger(message: string) {
-      return this.request('/api/v1/alerts/trigger', {
-        method: 'POST',
-        body: JSON.stringify({ message }),
-      })
+  health: {
+    async check() {
+      return this.request('/api/health')
     },
   },
 }

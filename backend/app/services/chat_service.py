@@ -4,6 +4,7 @@ from app.schemas import Message, ChatSession, EmotionResult
 from app.services.emotion_service import EmotionRecognitionEngine
 from app.services.alert_service import AlertService
 from app.services.llm_service import llm_service
+from app.services.supabase_service import supabase_service
 
 
 class ChatService:
@@ -13,6 +14,9 @@ class ChatService:
         self.sessions: Dict[str, ChatSession] = {}
         self.message_counter = 0
         self.use_llm = True  # MVP: 使用LLM生成回复
+        self.supabase_available = supabase_service.is_connected()
+        if not self.supabase_available:
+            print("警告: Supabase 未连接，对话将仅保存在内存中")
 
     async def create_session(self, user_id: str) -> str:
         session_id = f"session_{datetime.now().strftime('%Y%m%d%H%M%S')}_{user_id}"
@@ -74,6 +78,14 @@ class ChatService:
 
         session.messages.append(assistant_message)
 
+        # 异步保存到 Supabase（如果已连接）
+        if self.supabase_available:
+            try:
+                messages_dict = [msg.model_dump() for msg in session.messages]
+                await supabase_service.save_conversation(session_id, messages_dict)
+            except Exception as e:
+                print(f"保存对话到Supabase失败: {e}")
+
         return {
             "response": response,
             "emotion": emotion_result.model_dump(),
@@ -83,10 +95,19 @@ class ChatService:
 
     async def get_history(self, session_id: str) -> List[Dict]:
         session = self.sessions.get(session_id)
-        if not session:
-            raise ValueError("Session not found")
+        if session:
+            return [msg.model_dump() for msg in session.messages]
 
-        return [msg.model_dump() for msg in session.messages]
+        # 如果不在内存中，尝试从 Supabase 获取
+        if self.supabase_available:
+            try:
+                messages = await supabase_service.get_conversation(session_id)
+                if messages:
+                    return messages
+            except Exception as e:
+                print(f"从Supabase获取对话失败: {e}")
+
+        raise ValueError("Session not found")
 
     async def get_session(self, session_id: str) -> Optional[ChatSession]:
         return self.sessions.get(session_id)
