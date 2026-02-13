@@ -1,53 +1,62 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference types="vite/client" />
+
+const API_BASE_URL = (import.meta as unknown as { env: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL || '/api'
+
+interface RequestOptions {
+  method?: string
+  body?: string
+  headers?: Record<string, string>
+}
+
+async function request(endpoint: string, options: RequestInit = {}) {
+  const url = `${API_BASE_URL}${endpoint}`
+  const defaultOptions: RequestInit = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  }
+
+  try {
+    const response = await fetch(url, { ...defaultOptions, ...options })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('API request failed:', error)
+    throw error
+  }
+}
 
 export const api = {
   baseUrl: API_BASE_URL,
 
-  async request(endpoint: string, options: RequestInit = {}) {
-    const url = `${this.baseUrl}${endpoint}`
-    const defaultOptions: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    }
-
-    try {
-      const response = await fetch(url, { ...defaultOptions, ...options })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      return await response.json()
-    } catch (error) {
-      console.error('API request failed:', error)
-      throw error
-    }
-  },
-
   chat: {
     async createSession() {
-      return this.request('/api/chat/sessions', {
+      return request('/api/chat/sessions', {
         method: 'POST',
       })
     },
 
     async sendMessage(sessionId: string, message: string) {
-      return this.request(`/api/chat/sessions/${sessionId}/messages`, {
+      return request(`/api/chat/sessions/${sessionId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ message, session_id: sessionId }),
       })
     },
 
     async getHistory(sessionId: string) {
-      return this.request(`/api/chat/sessions/${sessionId}/history`)
+      return request(`/api/chat/sessions/${sessionId}/history`)
     },
   },
 
   health: {
     async check() {
-      return this.request('/api/health')
+      return request('/api/health')
     },
   },
 }
