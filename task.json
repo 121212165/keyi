@@ -50,7 +50,7 @@
         "创建 user slice",
         "在 App.tsx 中集成 Redux Provider"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": 5,

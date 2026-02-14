@@ -1,5 +1,7 @@
 # Supabase configuration file
 # https://supabase.com/docs/guides/local-development/cli/reference
 
+project_id = "zrzwpucermocngirynkn"
+
 [functions.chat]
 verify_jwt = false

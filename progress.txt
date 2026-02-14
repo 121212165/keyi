@@ -58,3 +58,23 @@
   - httpx[http2]>=0.27,<0.28
   - websockets>=11,<16
 - 配置已存在于 .env 文件
+
+---
+
+## 2026-02-14 - Task: 前端 Redux 状态管理集成
+
+### 完成内容：
+- 创建 store/index.ts (Redux store 配置)
+- 创建 store/slices/chatSlice.ts (聊天状态管理)
+- 创建 store/slices/assessmentSlice.ts (评估状态管理)
+- 创建 store/slices/userSlice.ts (用户状态管理)
+- 更新 App.tsx 集成 Redux Provider
+- 创建 eslint.config.mjs 配置
+
+### 测试方式：
+- npm run lint (0 错误，4 警告)
+
+### 备注：
+- 使用 @reduxjs/toolkit 管理状态
+- ChatPage 可使用 Redux store 管理消息状态
+- ESLint 配置已修复并通过检查
