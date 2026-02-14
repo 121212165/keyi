@@ -1,0 +1,5 @@
+# Supabase configuration file
+# https://supabase.com/docs/guides/local-development/cli/reference
+
+[functions.chat]
+verify_jwt = false
