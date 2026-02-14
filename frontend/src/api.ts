@@ -31,26 +31,32 @@ export const api = {
 
   chat: {
     async createSession() {
-      return request('/api/chat/sessions', {
+      return request('/api/v1/chat/sessions', {
         method: 'POST',
       })
     },
 
     async sendMessage(sessionId: string, message: string) {
-      return request(`/api/chat/sessions/${sessionId}/messages`, {
+      return request(`/api/v1/chat/sessions/${sessionId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ message, session_id: sessionId }),
+        body: JSON.stringify({ message }),
       })
     },
 
     async getHistory(sessionId: string) {
-      return request(`/api/chat/sessions/${sessionId}/history`)
+      return request(`/api/v1/chat/sessions/${sessionId}/history`)
     },
   },
 
   health: {
     async check() {
       return request('/api/health')
+    },
+  },
+
+  assessment: {
+    async getScale(scaleType: string) {
+      return request(`/api/v1/assessments/scales/${scaleType}`)
     },
   },
 }

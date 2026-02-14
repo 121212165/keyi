@@ -1,7 +1,6 @@
 from typing import Optional, Dict, List
 from datetime import datetime
 import uuid
-from app.models import User, ChatSession, Assessment, Alert
 from sqlalchemy.orm import Session
 
 
