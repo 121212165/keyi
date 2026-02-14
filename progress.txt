@@ -78,3 +78,43 @@
 - 使用 @reduxjs/toolkit 管理状态
 - ChatPage 可使用 Redux store 管理消息状态
 - ESLint 配置已修复并通过检查
+
+---
+
+## 2026-02-14 - Task: 前端 API 服务集成
+
+### 完成内容：
+- 更新 api.ts 匹配后端 API 端点
+- 添加 chat, emotion, assessment, suggestion API
+- 创建 hooks/useChat.ts Redux 集成
+- 创建 hooks/useAssessment.ts 评估钩子
+- 创建 hooks/index.ts 导出
+
+### 测试方式：
+- npm run lint (0 错误，4 警告)
+
+### 备注：
+- API base URL: /api/v1
+- hooks 可直接使用 Redux dispatch
+
+---
+
+## 2026-02-14 - Task: 前后端联调测试
+
+### 完成内容：
+- 启动后端服务 (uvicorn on port 8000)
+- 测试 /health API: ✅ healthy
+- 测试 /api/v1/chat/sessions: ✅ 会话创建成功
+- 测试 /api/v1/chat/messages: ✅ 消息发送成功
+- 测试 /api/v1/emotion/analyze: ✅ 情绪识别成功
+- 测试 /api/v1/assessments/scales: ✅ 量表加载成功
+- 测试 /api/v1/suggestions/generate: ✅ 建议生成成功
+
+### 测试方式：
+- curl 测试健康检查
+- Python httpx 测试聊天 API
+- Python httpx 测试情绪、评估、建议 API
+
+### 备注：
+- 后端 API 全部正常工作
+- 前端可正常对接后端服务

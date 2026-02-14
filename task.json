@@ -63,7 +63,7 @@
         "完善 emotion API 调用",
         "添加错误处理和重试机制"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": 6,
@@ -75,7 +75,7 @@
         "测试情绪分析功能",
         "验证危机预警流程"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": 7,
