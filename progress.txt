@@ -137,3 +137,21 @@ Windows 环境下 Vitest 与 @csstools/css-calc 存在兼容性问题
 ### 备注：
 - 测试文件已创建
 - 可在 Linux/macOS 环境运行: npx vitest run
+
+---
+
+## 2026-02-14 - Task: 项目构建验证
+
+### 完成内容：
+- 前端生产构建成功 (735 kB)
+- 后端 Python 语法检查通过
+- 修复 TypeScript 导出命名冲突
+
+### 测试方式：
+- npm run build (前端)
+- python -m py_compile (后端)
+
+### 备注：
+- 前端构建产物位于 dist/
+- chunk 较大，可后续优化代码分割
+- 后端代码无需额外构建步骤
