@@ -35,10 +35,9 @@
       "steps": [
         "创建 .env.example 包含 Supabase 配置",
         "配置 Supabase 客户端连接",
-        "创建数据库表结构（如果需要）",
         "测试数据库连接"
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": 4,
