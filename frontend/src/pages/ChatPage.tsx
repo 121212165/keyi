@@ -38,7 +38,8 @@ export default function ChatPage() {
       }
       setMessages([welcomeMessage])
     } catch (error) {
-      message.error('初始化会话失败，请刷新页面重试')
+      console.error('初始化会话失败:', error)
+      message.error(`初始化失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
@@ -156,7 +157,7 @@ export default function ChatPage() {
         title={
           <span style={{ color: '#ff4d4f' }}>紧急预警</span>
         }
-        visible={alertVisible}
+        open={alertVisible}
         onOk={() => setAlertVisible(false)}
         onCancel={() => setAlertVisible(false)}
         footer={[
