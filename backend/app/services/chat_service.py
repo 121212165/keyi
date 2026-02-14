@@ -1,190 +1,226 @@
-from typing import List, Optional, Dict
+"""
+对话服务模块 - Supabase PostgreSQL
+"""
+import uuid
 from datetime import datetime
-from app.schemas import Message, ChatSession, EmotionResult
-from app.services.emotion_service import EmotionRecognitionEngine
-from app.services.alert_service import AlertService
-from app.services.llm_service import llm_service
-from app.services.supabase_service import supabase_service
+from typing import Optional, List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.dialects.postgresql import UUID
+from app.models import ChatSession, Message
+from app.services.zhipu_service import zhipu_service, PSYCHOLOGIST_SYSTEM_PROMPT
 
 
 class ChatService:
+    """对话服务类"""
+
     def __init__(self):
-        self.emotion_engine = EmotionRecognitionEngine()
-        self.alert_service = AlertService()
-        self.sessions: Dict[str, ChatSession] = {}
-        self.message_counter = 0
-        self.use_llm = True  # MVP: 使用LLM生成回复
-        self.supabase_available = supabase_service.is_connected()
-        if not self.supabase_available:
-            print("警告: Supabase 未连接，对话将仅保存在内存中")
+        pass
 
-    async def create_session(self, user_id: str) -> str:
-        session_id = f"session_{datetime.now().strftime('%Y%m%d%H%M%S')}_{user_id}"
-        
-        welcome_message = Message(
-            id=str(self._get_next_message_id()),
-            role="assistant",
-            content="你好，我是AI心理医生，很高兴能陪伴你。今天想聊聊什么呢？",
-            timestamp=datetime.now(),
-            emotion=None,
-        )
-
+    async def create_session(self, user_id: str, db: AsyncSession) -> str:
+        """创建新对话会话"""
         session = ChatSession(
-            id=session_id,
-            user_id=user_id,
-            started_at=datetime.now(),
-            ended_at=None,
-            messages=[welcome_message],
-            emotion_summary={},
-            risk_flag=False,
+            id=uuid.uuid4(),
+            user_id=uuid.UUID(user_id),  # 转换为 UUID
+            title='新对话',
+            started_at=datetime.utcnow(),
+            message_count=0,
         )
-
-        self.sessions[session_id] = session
-        return session_id
+        db.add(session)
+        await db.commit()
+        return str(session.id)
 
     async def send_message(
-        self, session_id: str, user_id: str, message: str
-    ) -> Dict:
-        session = self.sessions.get(session_id)
-        if not session:
-            raise ValueError("Session not found")
+        self,
+        session_id: str,
+        user_id: str,
+        message: str,
+        db: AsyncSession,
+    ) -> dict:
+        """
+        发送消息，获取AI回复
 
-        emotion_result = await self.emotion_engine.analyze(message)
+        Args:
+            session_id: 会话ID
+            user_id: 用户ID
+            message: 用户消息
+            db: 数据库会话
 
-        user_message = Message(
-            id=str(self._get_next_message_id()),
+        Returns:
+            包含消息和AI回复的字典
+        """
+        # 1. 获取会话历史
+        history = await self.get_history(session_id, db)
+
+        # 2. 构建消息列表
+        messages = [
+            {"role": "system", "content": PSYCHOLOGIST_SYSTEM_PROMPT}
+        ]
+
+        # 添加历史消息
+        for msg in history:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+
+        # 3. 调用智谱AI获取回复
+        ai_reply = await zhipu_service.chat(messages=messages)
+
+        # 4. 保存用户消息到数据库
+        user_msg = Message(
+            id=uuid.uuid4(),
+            session_id=uuid.UUID(session_id),
             role="user",
             content=message,
-            timestamp=datetime.now(),
-            emotion=emotion_result,
+            created_at=datetime.utcnow(),
         )
+        db.add(user_msg)
 
-        session.messages.append(user_message)
-
-        alert_level = await self.alert_service.check_risk(user_id, message)
-        if alert_level.value == "level_1":
-            session.risk_flag = True
-            response = await self._generate_crisis_response(alert_level)
-        else:
-            response = await self._generate_response(message, emotion_result, session.messages)
-
-        assistant_message = Message(
-            id=str(self._get_next_message_id()),
+        # 5. 保存AI回复到数据库
+        assistant_msg = Message(
+            id=uuid.uuid4(),
+            session_id=uuid.UUID(session_id),
             role="assistant",
-            content=response,
-            timestamp=datetime.now(),
-            emotion=None,
+            content=ai_reply,
+            created_at=datetime.utcnow(),
         )
+        db.add(assistant_msg)
 
-        session.messages.append(assistant_message)
+        # 6. 更新会话信息
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
+        )
+        session = result.scalar_one_or_none()
 
-        # 异步保存到 Supabase（如果已连接）
-        if self.supabase_available:
-            try:
-                messages_dict = [msg.model_dump() for msg in session.messages]
-                await supabase_service.save_conversation(session_id, messages_dict)
-            except Exception as e:
-                print(f"保存对话到Supabase失败: {e}")
+        if session:
+            session.message_count += 2
+            session.updated_at = datetime.utcnow()
+
+        await db.commit()
 
         return {
-            "response": response,
-            "emotion": emotion_result.model_dump(),
-            "alert_level": alert_level.value if alert_level.value != "level_3" else None,
-            "message_id": assistant_message.id,
+            "message_id": str(user_msg.id),
+            "reply": ai_reply,
+            "reply_id": str(assistant_msg.id),
+            "timestamp": user_msg.created_at.isoformat(),
         }
 
-    async def get_history(self, session_id: str) -> List[Dict]:
-        session = self.sessions.get(session_id)
+    async def get_history(
+        self,
+        session_id: str,
+        db: AsyncSession,
+        limit: int = 50,
+    ) -> List[dict]:
+        """
+        获取会话历史
+
+        Args:
+            session_id: 会话ID
+            db: 数据库会话
+            limit: 最大消息数量
+
+        Returns:
+            消息列表
+        """
+        result = await db.execute(
+            select(Message)
+            .where(Message.session_id == uuid.UUID(session_id))
+            .order_by(Message.created_at.asc())
+            .limit(limit)
+        )
+        messages = result.scalars().all()
+
+        return [
+            {
+                "id": str(msg.id),
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.created_at.isoformat(),
+                "emotion": msg.emotion,
+            }
+            for msg in messages
+        ]
+
+    async def get_sessions(
+        self,
+        user_id: str,
+        db: AsyncSession,
+    ) -> List[dict]:
+        """
+        获取用户的所有会话
+
+        Args:
+            user_id: 用户ID
+            db: 数据库会话
+
+        Returns:
+            会话列表
+        """
+        result = await db.execute(
+            select(ChatSession)
+            .where(ChatSession.user_id == uuid.UUID(user_id))
+            .order_by(ChatSession.started_at.desc())
+        )
+        sessions = result.scalars().all()
+
+        return [
+            {
+                "id": str(session.id),
+                "title": session.title,
+                "started_at": session.started_at.isoformat(),
+                "updated_at": session.updated_at.isoformat() if session.updated_at else None,
+                "message_count": session.message_count or 0,
+            }
+            for session in sessions
+        ]
+
+    async def delete_session(
+        self,
+        session_id: str,
+        db: AsyncSession,
+    ) -> bool:
+        """
+        删除会话及所有消息 (级联删除由数据库处理)
+
+        Args:
+            session_id: 会话ID
+            db: 数据库会话
+
+        Returns:
+            是否成功
+        """
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
+        )
+        session = result.scalar_one_or_none()
+
         if session:
-            return [msg.model_dump() for msg in session.messages]
+            await db.delete(session)
+            await db.commit()
+            return True
 
-        # 如果不在内存中，尝试从 Supabase 获取
-        if self.supabase_available:
-            try:
-                messages = await supabase_service.get_conversation(session_id)
-                if messages:
-                    return messages
-            except Exception as e:
-                print(f"从Supabase获取对话失败: {e}")
+        return False
 
-        raise ValueError("Session not found")
+    async def update_session_title(
+        self,
+        session_id: str,
+        title: str,
+        db: AsyncSession,
+    ) -> bool:
+        """更新会话标题"""
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
+        )
+        session = result.scalar_one_or_none()
 
-    async def get_session(self, session_id: str) -> Optional[ChatSession]:
-        return self.sessions.get(session_id)
+        if session:
+            session.title = title
+            await db.commit()
+            return True
 
-    async def analyze_emotion(self, text: str) -> EmotionResult:
-        return await self.emotion_engine.analyze(text)
+        return False
 
-    def _get_next_message_id(self) -> int:
-        self.message_counter += 1
-        return self.message_counter
 
-    async def _generate_response(
-        self, user_message: str, emotion: EmotionResult, history: List[Message]
-    ) -> str:
-        # MVP: 使用LLM生成回复
-        if self.use_llm:
-            # 转换历史消息格式
-            history_dicts = []
-            for msg in history:
-                history_dicts.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-            return await llm_service.chat(user_message, history_dicts)
-
-        # 备用：使用模板回复
-        primary_emotion = emotion.primary_emotion.value
-
-        response_templates = {
-            "joy": [
-                "很高兴听到你这样说！能多告诉我一些让你开心的事情吗？",
-                "这真是太棒了！保持这种积极的心情，你最近还有什么其他开心的事情吗？",
-            ],
-            "sadness": [
-                "我理解你现在的感受，这种感觉一定很难受。能具体说说是什么让你感到难过吗？",
-                "听到你这样说，我很关心你。这种情绪持续多久了？",
-            ],
-            "anger": [
-                "我能感觉到你现在很生气，这种感觉是可以理解的。是什么事情让你感到愤怒呢？",
-                "生气是正常的情绪反应。能和我分享一下发生了什么吗？",
-            ],
-            "fear": [
-                "我能理解你的担心，这种焦虑感确实让人不舒服。具体是什么让你感到害怕呢？",
-                "面对不确定的事情，感到害怕是很正常的。你觉得自己最需要什么样的支持？",
-            ],
-            "anxiety": [
-                "我理解你现在的焦虑，这种紧张感确实让人不舒服。能具体说说是什么让你感到压力吗？",
-                "面对这种情况，感到焦虑是很正常的。你觉得目前最需要的是什么样的支持？",
-            ],
-            "depression": [
-                "听起来你最近情绪比较低落，这种感觉一定很难受。这种情况持续多久了？",
-                "我能感受到你的痛苦，你并不孤单。除了不想做事情，你还有其他感觉吗？",
-            ],
-            "loneliness": [
-                "孤独感确实很难受，我理解你的感受。你最近有和什么人交流过吗？",
-                "感到孤独时，寻求连接是很重要的。你有什么方式可以和别人建立联系吗？",
-            ],
-            "guilt": [
-                "内疚感确实很沉重，但每个人都有犯错的时候。能和我分享一下是什么让你感到内疚吗？",
-                "对自己宽容一些是很重要的。你觉得这种内疚感对你有什么影响？",
-            ],
-        }
-
-        if primary_emotion in response_templates:
-            import random
-            return random.choice(response_templates[primary_emotion])
-
-        return "谢谢你和我分享这些。能多告诉我一些吗？"
-
-    async def _generate_crisis_response(self, alert_level) -> str:
-        if alert_level.value == "level_1":
-            return (
-                "我很担心你现在的状态。你的生命很重要，请不要独自承受这份痛苦。\n\n"
-                "紧急求助资源：\n"
-                "- 全国心理援助热线：400-161-9995\n"
-                "- 就近精神卫生中心\n"
-                "- 紧急电话：110 / 120\n\n"
-                "请立即寻求专业帮助，你值得被拯救。"
-            )
-        return "我理解你现在的感受，如果情况严重，请考虑寻求专业帮助。"
+# 单例实例
+chat_service = ChatService()
