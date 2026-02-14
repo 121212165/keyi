@@ -3,6 +3,7 @@ import assessmentReducer, {
   setType,
   setQuestions,
   setAnswer,
+  setAnswers,
   setResult,
   setSubmitting,
   setError,
