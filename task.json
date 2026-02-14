@@ -88,7 +88,8 @@
         "为 ProfilePage 添加测试",
         "运行前端测试并确保通过"
       ],
-      "passes": false
+      "passes": false,
+      "blocking": "Windows Vitest 依赖兼容问题"
     },
     {
       "id": 8,
