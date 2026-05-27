@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # LLM 配置（默认使用小米 MiMo）
     LLM_API_KEY: Optional[str] = None
     LLM_MODEL: str = "mimo-v2.5-pro"
-    LLM_BASE_URL: str = "https://token-plan-cn.xiaomimimo.com/anthropic"
+    LLM_BASE_URL: str = "https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages"
     LLM_PROVIDER: str = "anthropic"  # "anthropic" | "openai" | "zhipu"
 
     # 兼容旧配置（智谱AI）
