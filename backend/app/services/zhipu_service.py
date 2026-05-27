@@ -79,10 +79,14 @@ class LLMService:
                 )
                 response.raise_for_status()
                 data = response.json()
-                # Anthropic 格式: content[0].text
+                # Anthropic 格式: content 数组，可能包含 thinking 和 text 块
                 content_blocks = data.get("content", [])
+                for block in content_blocks:
+                    if block.get("type") == "text":
+                        return block.get("text", "")
+                # 如果没有 text 块，尝试第一个块
                 if content_blocks:
-                    return content_blocks[0].get("text", "")
+                    return content_blocks[0].get("text", content_blocks[0].get("thinking", ""))
                 return ""
         except httpx.HTTPStatusError as e:
             raise Exception(f"LLM调用失败: HTTP {e.response.status_code} - {e.response.text}")
