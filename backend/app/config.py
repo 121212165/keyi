@@ -14,11 +14,17 @@ class Settings(BaseSettings):
     SUPABASE_KEY: Optional[str] = None
     SUPABASE_SERVICE_KEY: Optional[str] = None
 
-    # 智谱 AI 配置 (只用 GLM-4.7-Flash)
+    # LLM 配置（默认使用小米 MiMo）
+    LLM_API_KEY: Optional[str] = None
+    LLM_MODEL: str = "mimo-v2.5-pro"
+    LLM_BASE_URL: str = "https://token-plan-cn.xiaomimimo.com/anthropic"
+    LLM_PROVIDER: str = "anthropic"  # "anthropic" | "openai" | "zhipu"
+
+    # 兼容旧配置（智谱AI）
     ZHIPU_API_KEY: Optional[str] = None
     ZHIPU_MODEL: str = "glm-4.7-flash"
 
-    # Supabase PostgreSQL 连接字符串 (从环境变量读取或使用默认值)
+    # Supabase PostgreSQL 连接字符串
     SUPABASE_DB_URL: str = ""
 
     # 安全配置

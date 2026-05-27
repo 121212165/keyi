@@ -9,6 +9,7 @@ from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import UUID
 from app.models import ChatSession, Message
 from app.services.zhipu_service import zhipu_service, PSYCHOLOGIST_SYSTEM_PROMPT
+from app.prompts import get_system_prompt
 
 
 class ChatService:
@@ -17,14 +18,15 @@ class ChatService:
     def __init__(self):
         pass
 
-    async def create_session(self, user_id: str, db: AsyncSession) -> str:
+    async def create_session(self, user_id: str, db: AsyncSession, therapy_mode: str = "general") -> str:
         """创建新对话会话"""
         session = ChatSession(
             id=uuid.uuid4(),
-            user_id=uuid.UUID(user_id),  # 转换为 UUID
+            user_id=uuid.UUID(user_id),
             title='新对话',
             started_at=datetime.utcnow(),
             message_count=0,
+            therapy_mode=therapy_mode,
         )
         db.add(session)
         await db.commit()
@@ -52,9 +54,17 @@ class ChatService:
         # 1. 获取会话历史
         history = await self.get_history(session_id, db)
 
+        # 获取会话的疗法模式
+        session_result = await db.execute(
+            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
+        )
+        session_obj = session_result.scalar_one_or_none()
+        therapy_mode = session_obj.therapy_mode if session_obj else "general"
+
         # 2. 构建消息列表
+        system_prompt = get_system_prompt(therapy_mode)
         messages = [
-            {"role": "system", "content": PSYCHOLOGIST_SYSTEM_PROMPT}
+            {"role": "system", "content": system_prompt}
         ]
 
         # 添加历史消息
@@ -94,6 +104,14 @@ class ChatService:
         session = result.scalar_one_or_none()
 
         if session:
+            # 自动生成会话标题（仅在第一条用户消息时）
+            if session.title == '新对话' and session.message_count <= 1:
+                try:
+                    title = await self._generate_title(message, ai_reply)
+                    session.title = title
+                except Exception:
+                    pass  # 标题生成失败不影响主流程
+
             session.message_count += 2
             session.updated_at = datetime.utcnow()
 
@@ -220,6 +238,23 @@ class ChatService:
             return True
 
         return False
+
+    async def _generate_title(self, user_message: str, ai_reply: str) -> str:
+        """根据第一条对话内容生成简短标题"""
+        from app.services.zhipu_service import zhipu_service
+
+        title_prompt = f"""根据以下对话内容，生成一个简短的标题（不超过15个字）。
+只输出标题本身，不要任何其他内容。
+
+用户：{user_message[:100]}
+AI：{ai_reply[:100]}"""
+
+        title = await zhipu_service.chat(
+            messages=[{"role": "user", "content": title_prompt}],
+        )
+        # 清理标题，去掉引号等
+        title = title.strip().strip('"').strip("'").strip('《》')
+        return title[:15] if title else '新对话'
 
 
 # 单例实例
