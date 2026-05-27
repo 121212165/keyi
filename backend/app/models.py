@@ -25,6 +25,8 @@ class ChatSession(Base):
     emotion_summary = Column(JSON, default={})
     # Message count
     message_count = Column(Integer, default=0)
+    # 疗法模式
+    therapy_mode = Column(String(50), default='general')
 
 
 class Message(Base):
