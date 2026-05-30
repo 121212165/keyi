@@ -7,11 +7,13 @@ import AuthForm from '@/components/AuthForm';
 
 export default function Home() {
   const { user, token, setUser } = useStore();
-  const [mounted, setMounted] = useState(false);
+  const [mounted] = useState(() => {
+    if (typeof window !== 'undefined') return true;
+    return false;
+  });
 
   // 只在客户端挂载后恢复用户状态
   useEffect(() => {
-    setMounted(true);
     if (!token && !user) {
       const saved = restoreUser();
       if (saved && saved.user && saved.token) {

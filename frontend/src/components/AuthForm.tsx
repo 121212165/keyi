@@ -49,8 +49,8 @@ export default function AuthForm() {
 
       setUser(data.user || { id: '', email }, data.access_token);
       window.location.reload();
-    } catch (err: any) {
-      setError(err.message || '操作失败');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '操作失败');
     } finally {
       setLoading(false);
     }

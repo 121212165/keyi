@@ -1,9 +1,12 @@
 """
 数据库连接管理 - Supabase PostgreSQL
 """
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
+
 from app.config import settings
+
 
 # PostgreSQL 异步引擎 (Supabase)
 def get_database_url() -> str:
@@ -18,6 +21,7 @@ def get_database_url() -> str:
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     return db_url
+
 
 # 创建异步数据库引擎
 DATABASE_URL = get_database_url()

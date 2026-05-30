@@ -2,8 +2,10 @@
 可意AI心理医生 - 后端API
 FastAPI + Supabase Auth + 智谱AI (GLM-4.7-Flash)
 """
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.database import init_db
 from app.routers import auth, chat, therapy
 
@@ -31,6 +33,7 @@ app.include_router(therapy.router)
 
 # ============ Health Endpoints ============
 
+
 @app.get("/")
 async def root():
     """根路径"""
@@ -49,6 +52,7 @@ async def health_check():
 
 # ============ Startup Event ============
 
+
 @app.on_event("startup")
 async def startup():
     """启动时初始化数据库"""
@@ -57,4 +61,5 @@ async def startup():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec B104

@@ -3,27 +3,31 @@
 - 对话会话管理 (chat)
 - 直接AI对话 (ai)
 """
+
 import json
-from fastapi import APIRouter, HTTPException, Depends, Header
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional
-from app.database import get_db
-from app.services.chat_service import chat_service
-from app.services.auth_service import auth_service
-from app.services.zhipu_service import zhipu_service
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
+from app.services.auth_service import auth_service
+from app.services.chat_service import chat_service
+from app.services.zhipu_service import zhipu_service
 
 # ============ Pydantic Models ============
 
+
 class MessageRequest(BaseModel):
     """发送消息请求"""
+
     message: str = Field(..., min_length=1, max_length=2000)
 
 
 class ChatResponse(BaseModel):
     """对话响应"""
+
     message_id: str
     reply: str
     reply_id: str
@@ -36,7 +40,7 @@ chat_router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 ai_router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
 
-async def _get_user_id(authorization: Optional[str] = Header(None)) -> str:
+async def _get_user_id(authorization: str | None = Header(None)) -> str:
     """从 authorization header 中获取 user_id"""
     user_id = "anonymous"
     if authorization and authorization.startswith("Bearer "):
@@ -49,10 +53,11 @@ async def _get_user_id(authorization: Optional[str] = Header(None)) -> str:
 
 # ============ Chat Endpoints ============
 
+
 @chat_router.post("/sessions")
 async def create_session(
     therapy_mode: str = "general",
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
     """创建新对话会话"""
@@ -63,7 +68,7 @@ async def create_session(
 
 @chat_router.get("/sessions")
 async def list_sessions(
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
     """获取用户的会话列表"""
@@ -76,7 +81,7 @@ async def list_sessions(
 async def send_message(
     session_id: str,
     request: MessageRequest,
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
     """发送消息，获取AI回复"""
@@ -91,7 +96,7 @@ async def send_message(
         )
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @chat_router.get("/sessions/{session_id}/history")
@@ -105,7 +110,7 @@ async def get_chat_history(
         messages = await chat_service.get_history(session_id, db, limit)
         return {"messages": messages}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @chat_router.delete("/sessions/{session_id}")
@@ -119,10 +124,11 @@ async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
 
 # ============ AI Chat Direct Endpoint ============
 
+
 @ai_router.post("/chat")
 async def ai_chat(
     request: MessageRequest,
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
 ):
     """直接与AI对话（无需创建会话）"""
     user_id = await _get_user_id(authorization)
@@ -140,21 +146,23 @@ async def ai_chat(
 async def send_message_stream(
     session_id: str,
     request: MessageRequest,
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
     """流式发送消息，获取 AI 回复 (SSE)"""
-    user_id = await _get_user_id(authorization)
+    await _get_user_id(authorization)
 
     async def event_generator():
         try:
             # 获取历史和构建消息（简化版，不保存到数据库）
             history = await chat_service.get_history(session_id, db)
 
-            from app.prompts import get_system_prompt
-            from sqlalchemy import select
-            from app.models import ChatSession
             import uuid as uuid_mod
+
+            from sqlalchemy import select
+
+            from app.models import ChatSession
+            from app.prompts import get_system_prompt
 
             # 获取会话的疗法模式
             session_result = await db.execute(
@@ -171,13 +179,16 @@ async def send_message_stream(
             messages.append({"role": "user", "content": request.message})
 
             full_reply = ""
-            async for chunk in zhipu_service.chat_stream(messages=messages, system_prompt=system_prompt):
+            async for chunk in zhipu_service.chat_stream(
+                messages=messages, system_prompt=system_prompt
+            ):
                 full_reply += chunk
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
 
             # 流结束后保存消息到数据库
             import uuid
             from datetime import datetime
+
             from app.models import Message
 
             user_msg = Message(

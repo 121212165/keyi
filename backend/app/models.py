@@ -1,15 +1,17 @@
 # Database models for the application - Supabase PostgreSQL
-from sqlalchemy import Column, String, DateTime, Integer, JSON, Text
+import uuid
+from datetime import datetime
+
+from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
-import uuid
 
 Base = declarative_base()
 
 
 class ChatSession(Base):
     """Chat session model for tracking user conversations."""
+
     __tablename__ = "chat_sessions"
 
     # Primary key using UUID (Supabase format)
@@ -17,7 +19,7 @@ class ChatSession(Base):
     # Foreign key to User (Supabase auth.users.id is UUID)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     # Session title
-    title = Column(String(255), default='新对话')
+    title = Column(String(255), default="新对话")
     # Session timestamps
     started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
@@ -26,11 +28,12 @@ class ChatSession(Base):
     # Message count
     message_count = Column(Integer, default=0)
     # 疗法模式
-    therapy_mode = Column(String(50), default='general')
+    therapy_mode = Column(String(50), default="general")
 
 
 class Message(Base):
     """Message model for storing chat messages."""
+
     __tablename__ = "messages"
 
     # Primary key using UUID
@@ -48,6 +51,7 @@ class Message(Base):
 
 class UserProfile(Base):
     """User profile model for storing additional user information."""
+
     __tablename__ = "user_profiles"
 
     # Primary key - links to Supabase auth.users
