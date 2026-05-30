@@ -1,8 +1,11 @@
 """
 认证服务 (Supabase Auth)
 """
-from typing import Optional, Dict, Any
-from supabase import create_client, Client
+
+from typing import Any
+
+from supabase import Client, create_client
+
 from app.config import settings
 
 
@@ -10,19 +13,16 @@ class AuthService:
     """Supabase认证服务"""
 
     def __init__(self):
-        self.client: Optional[Client] = None
+        self.client: Client | None = None
         if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-            self.client = create_client(
-                settings.SUPABASE_URL,
-                settings.SUPABASE_KEY
-            )
+            self.client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
     async def sign_up(
         self,
         email: str,
         password: str,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         用户注册
 
@@ -38,11 +38,13 @@ class AuthService:
             raise Exception("Supabase未配置")
 
         try:
-            result = self.client.auth.sign_up({
-                "email": email,
-                "password": password,
-                **kwargs,
-            })
+            result = self.client.auth.sign_up(
+                {
+                    "email": email,
+                    "password": password,
+                    **kwargs,
+                }
+            )
             return {
                 "success": True,
                 "user": result.user,
@@ -58,7 +60,7 @@ class AuthService:
         self,
         email: str,
         password: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         用户登录
 
@@ -73,10 +75,12 @@ class AuthService:
             raise Exception("Supabase未配置")
 
         try:
-            result = self.client.auth.sign_in_with_password({
-                "email": email,
-                "password": password,
-            })
+            result = self.client.auth.sign_in_with_password(
+                {
+                    "email": email,
+                    "password": password,
+                }
+            )
             return {
                 "success": True,
                 "user": result.user,
@@ -104,7 +108,7 @@ class AuthService:
         except Exception:
             return False
 
-    async def get_user(self, token: str) -> Dict[str, Any]:
+    async def get_user(self, token: str) -> dict[str, Any]:
         """
         获取当前用户信息
 
@@ -148,7 +152,7 @@ class AuthService:
         except Exception:
             return False
 
-    def refresh_session(self, refresh_token: str) -> Dict[str, Any]:
+    def refresh_session(self, refresh_token: str) -> dict[str, Any]:
         """
         刷新会话
 

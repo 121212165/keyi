@@ -2,12 +2,13 @@
 系统脱敏疗法服务
 实现 TherapyProtocol 接口
 """
-import re
+
 import json
-from typing import List
+import re
+
+from app.prompts import get_system_prompt
 from app.services.therapy_base import TherapyProtocol, TherapyResponse
 from app.services.zhipu_service import zhipu_service
-from app.prompts import get_system_prompt
 
 
 class DesensitizeService(TherapyProtocol):
@@ -25,7 +26,7 @@ class DesensitizeService(TherapyProtocol):
         self,
         session_id: str,
         user_message: str,
-        history: List[dict],
+        history: list[dict],
     ) -> TherapyResponse:
         """
         处理脱敏疗法对话
@@ -39,10 +40,12 @@ class DesensitizeService(TherapyProtocol):
         # 构建消息列表
         messages = []
         for msg in history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"],
-            })
+            messages.append(
+                {
+                    "role": msg["role"],
+                    "content": msg["content"],
+                }
+            )
         messages.append({"role": "user", "content": user_message})
 
         # 调用 LLM
@@ -64,7 +67,7 @@ class DesensitizeService(TherapyProtocol):
     def _extract_desensitize_record(self, reply: str) -> dict:
         """从回复中提取 DESENSITIZE_RECORD JSON"""
         match = re.search(
-            r'<DESENSITIZE_RECORD>(.*?)</DESENSITIZE_RECORD>',
+            r"<DESENSITIZE_RECORD>(.*?)</DESENSITIZE_RECORD>",
             reply,
             re.DOTALL,
         )
@@ -78,8 +81,8 @@ class DesensitizeService(TherapyProtocol):
     def _remove_desensitize_record(self, reply: str) -> str:
         """从回复中移除 DESENSITIZE_RECORD 标记"""
         return re.sub(
-            r'\s*<DESENSITIZE_RECORD>.*?</DESENSITIZE_RECORD>\s*',
-            '',
+            r"\s*<DESENSITIZE_RECORD>.*?</DESENSITIZE_RECORD>\s*",
+            "",
             reply,
             flags=re.DOTALL,
         ).strip()
