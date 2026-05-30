@@ -2,39 +2,45 @@
 认证相关路由
 用户注册、登录、登出、获取当前用户信息
 """
-from fastapi import APIRouter, HTTPException, Depends, Header
-from pydantic import BaseModel, Field, EmailStr
-from typing import Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.database import get_db
 from app.services.auth_service import auth_service
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 # ============ Pydantic Models ============
 
+
 class RegisterRequest(BaseModel):
     """用户注册请求"""
+
     email: EmailStr
     password: str = Field(..., min_length=6)
 
 
 class LoginRequest(BaseModel):
     """用户登录请求"""
+
     email: EmailStr
     password: str
 
 
 class TokenResponse(BaseModel):
     """令牌响应"""
+
     access_token: str
-    refresh_token: Optional[str] = None
+    refresh_token: str | None = None
     token_type: str = "bearer"
-    user: Optional[dict] = None
+    user: dict | None = None
 
 
 # ============ Auth Endpoints ============
+
 
 @router.post("/register", response_model=TokenResponse)
 async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
@@ -81,14 +87,14 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/logout")
-async def logout(authorization: Optional[str] = Header(None)):
+async def logout(authorization: str | None = Header(None)):
     """用户登出"""
     await auth_service.sign_out()
     return {"message": "登出成功"}
 
 
 @router.get("/me")
-async def get_me(authorization: Optional[str] = Header(None)):
+async def get_me(authorization: str | None = Header(None)):
     """获取当前用户信息"""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="未登录")

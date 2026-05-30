@@ -1,15 +1,16 @@
 """
 对话服务模块 - Supabase PostgreSQL
 """
+
 import uuid
 from datetime import datetime
-from typing import Optional, List
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from sqlalchemy.dialects.postgresql import UUID
+
 from app.models import ChatSession, Message
-from app.services.zhipu_service import zhipu_service, PSYCHOLOGIST_SYSTEM_PROMPT
 from app.prompts import get_system_prompt
+from app.services.zhipu_service import zhipu_service
 
 
 class ChatService:
@@ -18,12 +19,14 @@ class ChatService:
     def __init__(self):
         pass
 
-    async def create_session(self, user_id: str, db: AsyncSession, therapy_mode: str = "general") -> str:
+    async def create_session(
+        self, user_id: str, db: AsyncSession, therapy_mode: str = "general"
+    ) -> str:
         """创建新对话会话"""
         session = ChatSession(
             id=uuid.uuid4(),
             user_id=uuid.UUID(user_id),
-            title='新对话',
+            title="新对话",
             started_at=datetime.utcnow(),
             message_count=0,
             therapy_mode=therapy_mode,
@@ -63,16 +66,11 @@ class ChatService:
 
         # 2. 构建消息列表
         system_prompt = get_system_prompt(therapy_mode)
-        messages = [
-            {"role": "system", "content": system_prompt}
-        ]
+        messages = [{"role": "system", "content": system_prompt}]
 
         # 添加历史消息
         for msg in history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
         # 3. 调用智谱AI获取回复
         ai_reply = await zhipu_service.chat(messages=messages)
@@ -105,7 +103,7 @@ class ChatService:
 
         if session:
             # 自动生成会话标题（仅在第一条用户消息时）
-            if session.title == '新对话' and session.message_count <= 1:
+            if session.title == "新对话" and session.message_count <= 1:
                 try:
                     title = await self._generate_title(message, ai_reply)
                     session.title = title
@@ -129,7 +127,7 @@ class ChatService:
         session_id: str,
         db: AsyncSession,
         limit: int = 50,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """
         获取会话历史
 
@@ -164,7 +162,7 @@ class ChatService:
         self,
         user_id: str,
         db: AsyncSession,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """
         获取用户的所有会话
 
@@ -253,8 +251,8 @@ AI：{ai_reply[:100]}"""
             messages=[{"role": "user", "content": title_prompt}],
         )
         # 清理标题，去掉引号等
-        title = title.strip().strip('"').strip("'").strip('《》')
-        return title[:15] if title else '新对话'
+        title = title.strip().strip('"').strip("'").strip("《》")
+        return title[:15] if title else "新对话"
 
 
 # 单例实例

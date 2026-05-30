@@ -14,6 +14,12 @@ keyi.db
 .pytest_cache/
 .coverage
 htmlcov/
+*.egg-info/
+dist/
+.ruff_cache/
+test-report.html
+coverage.xml
+coverage.json
 
 # Node
 node_modules/

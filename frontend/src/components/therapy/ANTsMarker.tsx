@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface ANTRecord {
   id: string;
@@ -53,7 +53,7 @@ export default function ANTsMarker({ messageContent, onMark }: ANTsMarkerProps) 
     // 保存到 localStorage
     const ants = loadANTs();
     ants.push({
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       content: messageContent.substring(0, 100),
       type,
       timestamp: new Date().toISOString(),
@@ -101,11 +101,7 @@ export default function ANTsMarker({ messageContent, onMark }: ANTsMarkerProps) 
 
 // 独立的 ANTs 列表组件（用于侧边栏）
 export function ANTsList() {
-  const [ants, setANTs] = useState<ANTRecord[]>([]);
-
-  useEffect(() => {
-    setANTs(loadANTs());
-  }, []);
+  const [ants, setANTs] = useState<ANTRecord[]>(() => loadANTs());
 
   const clearANTs = () => {
     saveANTs([]);

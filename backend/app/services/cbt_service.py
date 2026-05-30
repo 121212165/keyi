@@ -2,12 +2,13 @@
 CBT 认知行为疗法服务
 实现 TherapyProtocol 接口
 """
-import re
+
 import json
-from typing import List, Optional
+import re
+
+from app.prompts import get_system_prompt
 from app.services.therapy_base import TherapyProtocol, TherapyResponse
 from app.services.zhipu_service import zhipu_service
-from app.prompts import get_system_prompt
 
 
 class CBTService(TherapyProtocol):
@@ -25,7 +26,7 @@ class CBTService(TherapyProtocol):
         self,
         session_id: str,
         user_message: str,
-        history: List[dict],
+        history: list[dict],
     ) -> TherapyResponse:
         """
         处理 CBT 对话
@@ -39,10 +40,12 @@ class CBTService(TherapyProtocol):
         # 构建消息列表
         messages = []
         for msg in history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"],
-            })
+            messages.append(
+                {
+                    "role": msg["role"],
+                    "content": msg["content"],
+                }
+            )
         messages.append({"role": "user", "content": user_message})
 
         # 调用 LLM
@@ -64,7 +67,7 @@ class CBTService(TherapyProtocol):
     def _extract_therapy_record(self, reply: str) -> dict:
         """从回复中提取 THERAPY_RECORD JSON"""
         match = re.search(
-            r'<THERAPY_RECORD>(.*?)</THERAPY_RECORD>',
+            r"<THERAPY_RECORD>(.*?)</THERAPY_RECORD>",
             reply,
             re.DOTALL,
         )
@@ -78,8 +81,8 @@ class CBTService(TherapyProtocol):
     def _remove_therapy_record(self, reply: str) -> str:
         """从回复中移除 THERAPY_RECORD 标记"""
         return re.sub(
-            r'\s*<THERAPY_RECORD>.*?</THERAPY_RECORD>\s*',
-            '',
+            r"\s*<THERAPY_RECORD>.*?</THERAPY_RECORD>\s*",
+            "",
             reply,
             flags=re.DOTALL,
         ).strip()

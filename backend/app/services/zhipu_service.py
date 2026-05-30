@@ -1,9 +1,12 @@
 """
 LLM 服务 - 支持小米 MiMo (Anthropic 兼容) 和智谱 AI
 """
+
 import json
-from typing import Optional, AsyncGenerator
+from collections.abc import AsyncGenerator
+
 import httpx
+
 from app.config import settings
 
 
@@ -33,7 +36,7 @@ class LLMService:
     async def chat(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         """
         发送对话请求，获取 AI 回复
@@ -53,7 +56,7 @@ class LLMService:
     async def _chat_anthropic(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         """Anthropic Messages API 格式调用"""
         payload = {
@@ -89,14 +92,16 @@ class LLMService:
                     return content_blocks[0].get("text", content_blocks[0].get("thinking", ""))
                 return ""
         except httpx.HTTPStatusError as e:
-            raise Exception(f"LLM调用失败: HTTP {e.response.status_code} - {e.response.text}")
+            raise Exception(
+                f"LLM调用失败: HTTP {e.response.status_code} - {e.response.text}"
+            ) from e
         except Exception as e:
-            raise Exception(f"LLM调用失败: {str(e)}")
+            raise Exception(f"LLM调用失败: {str(e)}") from e
 
     async def _chat_openai(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         """OpenAI 兼容格式调用（智谱 AI、OpenAI 等）"""
         all_messages = messages.copy()
@@ -127,14 +132,16 @@ class LLMService:
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
         except httpx.HTTPStatusError as e:
-            raise Exception(f"LLM调用失败: HTTP {e.response.status_code} - {e.response.text}")
+            raise Exception(
+                f"LLM调用失败: HTTP {e.response.status_code} - {e.response.text}"
+            ) from e
         except Exception as e:
-            raise Exception(f"LLM调用失败: {str(e)}")
+            raise Exception(f"LLM调用失败: {str(e)}") from e
 
     async def chat_stream(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """流式获取 AI 回复"""
         if self.provider == "anthropic":
@@ -147,7 +154,7 @@ class LLMService:
     async def _stream_anthropic(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Anthropic 流式调用"""
         payload = {
@@ -166,27 +173,29 @@ class LLMService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                async with client.stream("POST", self.base_url, json=payload, headers=headers) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            data = line[6:]
-                            try:
-                                obj = json.loads(data)
-                                if obj.get("type") == "content_block_delta":
-                                    text = obj.get("delta", {}).get("text", "")
-                                    if text:
-                                        yield text
-                            except json.JSONDecodeError:
-                                continue
+            async with (
+                httpx.AsyncClient(timeout=60.0) as client,
+                client.stream("POST", self.base_url, json=payload, headers=headers) as response,
+            ):
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data = line[6:]
+                        try:
+                            obj = json.loads(data)
+                            if obj.get("type") == "content_block_delta":
+                                text = obj.get("delta", {}).get("text", "")
+                                if text:
+                                    yield text
+                        except json.JSONDecodeError:
+                            continue
         except Exception as e:
-            raise Exception(f"LLM流式调用失败: {str(e)}")
+            raise Exception(f"LLM流式调用失败: {str(e)}") from e
 
     async def _stream_openai(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """OpenAI 兼容流式调用"""
         all_messages = messages.copy()
@@ -207,23 +216,25 @@ class LLMService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                async with client.stream("POST", self.base_url, json=payload, headers=headers) as response:
-                    response.raise_for_status()
-                    async for chunk in response.aiter_lines():
-                        if chunk.startswith("data: "):
-                            data = chunk[6:]
-                            if data == "[DONE]":
-                                break
-                            try:
-                                obj = json.loads(data)
-                                content = obj.get("choices", [{}])[0].get("delta", {}).get("content")
-                                if content:
-                                    yield content
-                            except json.JSONDecodeError:
-                                continue
+            async with (
+                httpx.AsyncClient(timeout=60.0) as client,
+                client.stream("POST", self.base_url, json=payload, headers=headers) as response,
+            ):
+                response.raise_for_status()
+                async for chunk in response.aiter_lines():
+                    if chunk.startswith("data: "):
+                        data = chunk[6:]
+                        if data == "[DONE]":
+                            break
+                        try:
+                            obj = json.loads(data)
+                            content = obj.get("choices", [{}])[0].get("delta", {}).get("content")
+                            if content:
+                                yield content
+                        except json.JSONDecodeError:
+                            continue
         except Exception as e:
-            raise Exception(f"LLM流式调用失败: {str(e)}")
+            raise Exception(f"LLM流式调用失败: {str(e)}") from e
 
 
 # 心理医生系统提示词（保留兼容性）

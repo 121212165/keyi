@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface EmotionRecord {
   date: string;
@@ -50,14 +50,10 @@ function getRecentDays(records: EmotionRecord[], days: number = 7): (EmotionReco
 }
 
 export default function EmotionRecorder() {
-  const [records, setRecords] = useState<EmotionRecord[]>([]);
-  const [todayRecorded, setTodayRecorded] = useState(false);
-
-  useEffect(() => {
-    const loaded = loadRecords();
-    setRecords(loaded);
-    setTodayRecorded(loaded.some((r) => r.date === getToday()));
-  }, []);
+  const [records, setRecords] = useState<EmotionRecord[]>(() => loadRecords());
+  const [todayRecorded, setTodayRecorded] = useState(() =>
+    loadRecords().some((r) => r.date === getToday())
+  );
 
   const handleRecord = (score: number) => {
     const today = getToday();

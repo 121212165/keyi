@@ -2,14 +2,15 @@
 疗法服务基类
 定义所有疗法模块的通用接口
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass
 class TherapyResponse:
     """疗法响应数据类"""
+
     reply: str
     therapy_mode: str
     metadata: dict = field(default_factory=dict)
@@ -35,7 +36,7 @@ class TherapyProtocol(ABC):
         self,
         session_id: str,
         user_message: str,
-        history: List[dict],
+        history: list[dict],
     ) -> TherapyResponse:
         """
         处理用户消息，返回疗法响应
