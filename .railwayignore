@@ -1,0 +1,8 @@
+frontend/node_modules/
+backend/.venv/
+frontend/.next/
+.git/
+docs/
+scripts/
+supabase/
+*.md
