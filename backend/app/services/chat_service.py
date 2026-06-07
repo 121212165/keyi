@@ -1,43 +1,90 @@
 """
-对话服务模块 - Supabase PostgreSQL
+对话服务模块 - Supabase PostgreSQL (via supabase-py client)
 """
-import uuid
-from datetime import datetime
 from typing import Optional, List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from sqlalchemy.dialects.postgresql import UUID
-from app.models import ChatSession, Message
-from app.services.zhipu_service import zhipu_service, PSYCHOLOGIST_SYSTEM_PROMPT
+
+from app import db
+from app.services.zhipu_service import zhipu_service
 from app.prompts import get_system_prompt
 
 
 class ChatService:
     """对话服务类"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    async def create_session(self, user_id: str, db: AsyncSession, therapy_mode: str = "general") -> str:
-        """创建新对话会话"""
-        session = ChatSession(
-            id=uuid.uuid4(),
-            user_id=uuid.UUID(user_id),
-            title='新对话',
-            started_at=datetime.utcnow(),
-            message_count=0,
+    # ------------------------------------------------------------------
+    # Session management
+    # ------------------------------------------------------------------
+
+    def create_session(
+        self,
+        user_id: str,
+        therapy_mode: str = "general",
+    ) -> Optional[str]:
+        """创建新对话会话，返回 session_id 或 None"""
+        session = db.create_chat_session(
+            user_id=user_id,
             therapy_mode=therapy_mode,
         )
-        db.add(session)
-        await db.commit()
-        return str(session.id)
+        if session is None:
+            return None
+        return session["id"]
+
+    def get_sessions(self, user_id: str) -> List[dict]:
+        """获取用户的所有会话"""
+        sessions = db.get_user_sessions(user_id)
+        return [
+            {
+                "id": s["id"],
+                "title": s.get("title", "新对话"),
+                "started_at": s.get("started_at"),
+                "updated_at": s.get("updated_at"),
+                "message_count": s.get("message_count") or 0,
+            }
+            for s in sessions
+        ]
+
+    def delete_session(self, session_id: str) -> bool:
+        """删除会话及所有消息"""
+        return db.delete_chat_session(session_id)
+
+    def update_session_title(self, session_id: str, title: str) -> bool:
+        """更新会话标题"""
+        return db.update_session_title(session_id, title)
+
+    # ------------------------------------------------------------------
+    # History
+    # ------------------------------------------------------------------
+
+    def get_history(
+        self,
+        session_id: str,
+        limit: int = 50,
+    ) -> List[dict]:
+        """获取会话历史"""
+        messages = db.get_session_messages(session_id, limit=limit)
+        return [
+            {
+                "id": m["id"],
+                "role": m["role"],
+                "content": m["content"],
+                "timestamp": m.get("created_at"),
+                "emotion": m.get("emotion"),
+            }
+            for m in messages
+        ]
+
+    # ------------------------------------------------------------------
+    # Messaging
+    # ------------------------------------------------------------------
 
     async def send_message(
         self,
         session_id: str,
         user_id: str,
         message: str,
-        db: AsyncSession,
     ) -> dict:
         """
         发送消息，获取AI回复
@@ -46,203 +93,69 @@ class ChatService:
             session_id: 会话ID
             user_id: 用户ID
             message: 用户消息
-            db: 数据库会话
 
         Returns:
             包含消息和AI回复的字典
         """
         # 1. 获取会话历史
-        history = await self.get_history(session_id, db)
+        history = self.get_history(session_id)
 
         # 获取会话的疗法模式
-        session_result = await db.execute(
-            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
-        )
-        session_obj = session_result.scalar_one_or_none()
-        therapy_mode = session_obj.therapy_mode if session_obj else "general"
+        session_data = db.get_chat_session(session_id)
+        therapy_mode = (session_data or {}).get("therapy_mode", "general")
 
         # 2. 构建消息列表
         system_prompt = get_system_prompt(therapy_mode)
-        messages = [
+        messages: list[dict[str, str]] = [
             {"role": "system", "content": system_prompt}
         ]
-
-        # 添加历史消息
         for msg in history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # 3. 调用智谱AI获取回复
+        # 3. 调用AI获取回复
         ai_reply = await zhipu_service.chat(messages=messages)
 
         # 4. 保存用户消息到数据库
-        user_msg = Message(
-            id=uuid.uuid4(),
-            session_id=uuid.UUID(session_id),
+        user_msg = db.create_message(
+            session_id=session_id,
             role="user",
             content=message,
-            created_at=datetime.utcnow(),
         )
-        db.add(user_msg)
 
         # 5. 保存AI回复到数据库
-        assistant_msg = Message(
-            id=uuid.uuid4(),
-            session_id=uuid.UUID(session_id),
+        assistant_msg = db.create_message(
+            session_id=session_id,
             role="assistant",
             content=ai_reply,
-            created_at=datetime.utcnow(),
         )
-        db.add(assistant_msg)
 
-        # 6. 更新会话信息
-        result = await db.execute(
-            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-
-        if session:
-            # 自动生成会话标题（仅在第一条用户消息时）
-            if session.title == '新对话' and session.message_count <= 1:
+        # 6. 自动生成会话标题（仅在第一条用户消息时）
+        if session_data:
+            msg_count = session_data.get("message_count") or 0
+            title = session_data.get("title", "新对话")
+            if title == "新对话" and msg_count <= 1:
                 try:
-                    title = await self._generate_title(message, ai_reply)
-                    session.title = title
+                    new_title = await self._generate_title(message, ai_reply)
+                    db.update_session_title(session_id, new_title)
                 except Exception:
                     pass  # 标题生成失败不影响主流程
 
-            session.message_count += 2
-            session.updated_at = datetime.utcnow()
-
-        await db.commit()
+        # 7. 更新消息计数
+        db.increment_message_count(session_id, delta=2)
 
         return {
-            "message_id": str(user_msg.id),
+            "message_id": user_msg["id"] if user_msg else "",
             "reply": ai_reply,
-            "reply_id": str(assistant_msg.id),
-            "timestamp": user_msg.created_at.isoformat(),
+            "reply_id": assistant_msg["id"] if assistant_msg else "",
+            "timestamp": user_msg["created_at"] if user_msg else "",
         }
 
-    async def get_history(
-        self,
-        session_id: str,
-        db: AsyncSession,
-        limit: int = 50,
-    ) -> List[dict]:
-        """
-        获取会话历史
-
-        Args:
-            session_id: 会话ID
-            db: 数据库会话
-            limit: 最大消息数量
-
-        Returns:
-            消息列表
-        """
-        result = await db.execute(
-            select(Message)
-            .where(Message.session_id == uuid.UUID(session_id))
-            .order_by(Message.created_at.asc())
-            .limit(limit)
-        )
-        messages = result.scalars().all()
-
-        return [
-            {
-                "id": str(msg.id),
-                "role": msg.role,
-                "content": msg.content,
-                "timestamp": msg.created_at.isoformat(),
-                "emotion": msg.emotion,
-            }
-            for msg in messages
-        ]
-
-    async def get_sessions(
-        self,
-        user_id: str,
-        db: AsyncSession,
-    ) -> List[dict]:
-        """
-        获取用户的所有会话
-
-        Args:
-            user_id: 用户ID
-            db: 数据库会话
-
-        Returns:
-            会话列表
-        """
-        result = await db.execute(
-            select(ChatSession)
-            .where(ChatSession.user_id == uuid.UUID(user_id))
-            .order_by(ChatSession.started_at.desc())
-        )
-        sessions = result.scalars().all()
-
-        return [
-            {
-                "id": str(session.id),
-                "title": session.title,
-                "started_at": session.started_at.isoformat(),
-                "updated_at": session.updated_at.isoformat() if session.updated_at else None,
-                "message_count": session.message_count or 0,
-            }
-            for session in sessions
-        ]
-
-    async def delete_session(
-        self,
-        session_id: str,
-        db: AsyncSession,
-    ) -> bool:
-        """
-        删除会话及所有消息 (级联删除由数据库处理)
-
-        Args:
-            session_id: 会话ID
-            db: 数据库会话
-
-        Returns:
-            是否成功
-        """
-        result = await db.execute(
-            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-
-        if session:
-            await db.delete(session)
-            await db.commit()
-            return True
-
-        return False
-
-    async def update_session_title(
-        self,
-        session_id: str,
-        title: str,
-        db: AsyncSession,
-    ) -> bool:
-        """更新会话标题"""
-        result = await db.execute(
-            select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-
-        if session:
-            session.title = title
-            await db.commit()
-            return True
-
-        return False
+    # ------------------------------------------------------------------
+    # Title generation (private)
+    # ------------------------------------------------------------------
 
     async def _generate_title(self, user_message: str, ai_reply: str) -> str:
         """根据第一条对话内容生成简短标题"""
-        from app.services.zhipu_service import zhipu_service
-
         title_prompt = f"""根据以下对话内容，生成一个简短的标题（不超过15个字）。
 只输出标题本身，不要任何其他内容。
 
@@ -253,8 +166,8 @@ AI：{ai_reply[:100]}"""
             messages=[{"role": "user", "content": title_prompt}],
         )
         # 清理标题，去掉引号等
-        title = title.strip().strip('"').strip("'").strip('《》')
-        return title[:15] if title else '新对话'
+        title = title.strip().strip('"').strip("'").strip("《》")
+        return title[:15] if title else "新对话"
 
 
 # 单例实例

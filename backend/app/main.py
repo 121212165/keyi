@@ -4,7 +4,6 @@ FastAPI + Supabase Auth + 智谱AI (GLM-4.7-Flash)
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import init_db
 from app.routers import auth, chat, therapy
 
 app = FastAPI(
@@ -45,14 +44,6 @@ async def root():
 async def health_check():
     """健康检查"""
     return {"status": "healthy"}
-
-
-# ============ Startup Event ============
-
-@app.on_event("startup")
-async def startup():
-    """启动时初始化数据库"""
-    await init_db()
 
 
 if __name__ == "__main__":

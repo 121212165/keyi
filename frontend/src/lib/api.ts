@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -64,7 +64,7 @@ export const chatAPI = {
     message: string,
     token?: string
   ) {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
     const response = await fetch(
       `${API_URL}/api/v1/chat/sessions/${sessionId}/messages/stream`,
       {

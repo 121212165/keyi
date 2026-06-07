@@ -4,15 +4,14 @@
 - 直接AI对话 (ai)
 """
 import json
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional
-from app.database import get_db
+from app import db
 from app.services.chat_service import chat_service
 from app.services.auth_service import auth_service
 from app.services.zhipu_service import zhipu_service
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 # ============ Pydantic Models ============
@@ -53,22 +52,22 @@ async def _get_user_id(authorization: Optional[str] = Header(None)) -> str:
 async def create_session(
     therapy_mode: str = "general",
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
 ):
     """创建新对话会话"""
     user_id = await _get_user_id(authorization)
-    session_id = await chat_service.create_session(user_id, db, therapy_mode=therapy_mode)
+    session_id = chat_service.create_session(user_id, therapy_mode=therapy_mode)
+    if session_id is None:
+        raise HTTPException(status_code=500, detail="创建会话失败")
     return {"session_id": session_id, "therapy_mode": therapy_mode}
 
 
 @chat_router.get("/sessions")
 async def list_sessions(
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
 ):
     """获取用户的会话列表"""
     user_id = await _get_user_id(authorization)
-    sessions = await chat_service.get_sessions(user_id, db)
+    sessions = chat_service.get_sessions(user_id)
     return {"sessions": sessions}
 
 
@@ -77,7 +76,6 @@ async def send_message(
     session_id: str,
     request: MessageRequest,
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
 ):
     """发送消息，获取AI回复"""
     user_id = await _get_user_id(authorization)
@@ -87,7 +85,6 @@ async def send_message(
             session_id=session_id,
             user_id=user_id,
             message=request.message,
-            db=db,
         )
         return result
     except ValueError as e:
@@ -98,20 +95,19 @@ async def send_message(
 async def get_chat_history(
     session_id: str,
     limit: int = 50,
-    db: AsyncSession = Depends(get_db),
 ):
     """获取对话历史"""
     try:
-        messages = await chat_service.get_history(session_id, db, limit)
+        messages = chat_service.get_history(session_id, limit)
         return {"messages": messages}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @chat_router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_session(session_id: str):
     """删除会话"""
-    success = await chat_service.delete_session(session_id, db)
+    success = chat_service.delete_session(session_id)
     if not success:
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"message": "删除成功"}
@@ -141,28 +137,20 @@ async def send_message_stream(
     session_id: str,
     request: MessageRequest,
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
 ):
     """流式发送消息，获取 AI 回复 (SSE)"""
     user_id = await _get_user_id(authorization)
 
     async def event_generator():
         try:
-            # 获取历史和构建消息（简化版，不保存到数据库）
-            history = await chat_service.get_history(session_id, db)
+            # 获取历史和构建消息
+            history = chat_service.get_history(session_id)
 
             from app.prompts import get_system_prompt
-            from sqlalchemy import select
-            from app.models import ChatSession
-            import uuid as uuid_mod
 
             # 获取会话的疗法模式
-            session_result = await db.execute(
-                select(ChatSession).where(ChatSession.id == uuid_mod.UUID(session_id))
-            )
-            session_obj = session_result.scalar_one_or_none()
-            therapy_mode = session_obj.therapy_mode if session_obj else "general"
-
+            session_data = db.get_chat_session(session_id)
+            therapy_mode = (session_data or {}).get("therapy_mode", "general")
             system_prompt = get_system_prompt(therapy_mode)
 
             messages = []
@@ -176,35 +164,20 @@ async def send_message_stream(
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
 
             # 流结束后保存消息到数据库
-            import uuid
-            from datetime import datetime
-            from app.models import Message
-
-            user_msg = Message(
-                id=uuid.uuid4(),
-                session_id=uuid_mod.UUID(session_id),
+            user_msg = db.create_message(
+                session_id=session_id,
                 role="user",
                 content=request.message,
-                created_at=datetime.utcnow(),
             )
-            db.add(user_msg)
-
-            assistant_msg = Message(
-                id=uuid.uuid4(),
-                session_id=uuid_mod.UUID(session_id),
+            assistant_msg = db.create_message(
+                session_id=session_id,
                 role="assistant",
                 content=full_reply,
-                created_at=datetime.utcnow(),
             )
-            db.add(assistant_msg)
 
-            if session_obj:
-                session_obj.message_count += 2
-                session_obj.updated_at = datetime.utcnow()
+            db.increment_message_count(session_id, delta=2)
 
-            await db.commit()
-
-            yield f"data: {json.dumps({'done': True, 'message_id': str(user_msg.id)})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'message_id': user_msg['id'] if user_msg else ''})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 

@@ -2,12 +2,10 @@
 认证相关路由
 用户注册、登录、登出、获取当前用户信息
 """
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional
-from app.database import get_db
 from app.services.auth_service import auth_service
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -37,7 +35,7 @@ class TokenResponse(BaseModel):
 # ============ Auth Endpoints ============
 
 @router.post("/register", response_model=TokenResponse)
-async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(request: RegisterRequest):
     """用户注册"""
     result = await auth_service.sign_up(
         email=request.email,
@@ -59,7 +57,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: LoginRequest):
     """用户登录"""
     result = await auth_service.sign_in(
         email=request.email,

@@ -28,7 +28,7 @@ export default function AuthForm() {
     setLoading(true);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
       const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register';
 
       const response = await fetch(`${API_URL}${endpoint}`, {
