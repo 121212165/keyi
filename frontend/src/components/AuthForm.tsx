@@ -40,11 +40,11 @@ export default function AuthForm() {
       const data = await response.json();
 
       if (!response.ok) {
-        // 检查是否需要邮箱验证
-        if (data.detail?.includes('Email not confirmed') || data.detail?.includes('验证')) {
+        const msg = data.error || data.detail || '请求失败';
+        if (msg.includes('Email not confirmed') || msg.includes('验证')) {
           throw new Error('请先验证邮箱后再登录。查收您的邮件，点击验证链接后刷新页面再试。');
         }
-        throw new Error(data.detail || '请求失败');
+        throw new Error(msg);
       }
 
       setUser(data.user || { id: '', email }, data.access_token);
