@@ -14,8 +14,16 @@ interface MessageBubbleProps {
   message: Message;
 }
 
+function stripInternalTags(content: string): string {
+  return content
+    .replace(/<THERAPY_RECORD>[\s\S]*?<\/THERAPY_RECORD>/g, '')
+    .replace(/<DESENSITIZE_RECORD>[\s\S]*?<\/DESENSITIZE_RECORD>/g, '')
+    .trim();
+}
+
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+  const displayContent = isUser ? message.content : stripInternalTags(message.content);
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -23,7 +31,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         className={`max-w-[70%] px-4 py-3 ${isUser ? 'chat-bubble-user' : 'chat-bubble-assistant'}`}
         style={{ whiteSpace: 'pre-wrap' }}
       >
-        {message.content}
+        {displayContent}
         {isUser && (
           <ANTsMarker
             messageContent={message.content}
