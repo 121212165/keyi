@@ -49,58 +49,66 @@ export default function AuthForm() {
 
       setUser(data.user || { id: '', email }, data.access_token);
       window.location.reload();
-    } catch (err: any) {
-      setError(err.message || '操作失败');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '操作失败');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-b from-warm-50 to-white">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "#fbf6ee" }}>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-primary-600 mb-2">可意</h1>
-          <p className="text-gray-600">温暖、专业、有同理心的AI心理助手</p>
+          <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "2.5rem", fontWeight: 400, color: "#2f5b4f", letterSpacing: "-0.02em" }} className="mb-2">
+            林序
+          </h1>
+          <p style={{ color: "#7a6d63" }}>在林间找到安宁</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-2xl font-semibold text-center mb-6">
+        <div style={{ background: "#fffdf8", borderRadius: "16px", boxShadow: "0 20px 52px rgba(32,25,20,0.12)", padding: "2rem" }}>
+          <h2 className="text-2xl font-semibold text-center mb-6" style={{ color: "#201914" }}>
             {isLogin ? '欢迎回来' : '创建账户'}
           </h2>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">
+            <div style={{ background: "#fdf0ef", color: "#b33a3a" }} className="p-3 rounded-lg mb-4 text-sm">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4 text-sm">
+            <div style={{ background: "#f0f7f0", color: "#4f8a4f" }} className="p-3 rounded-lg mb-4 text-sm">
               {success}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: "#4c4037" }}>邮箱</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                className="w-full px-4 py-2 rounded-lg outline-none"
+                style={{ border: "1px solid #ded2c3", background: "#fffdf8", color: "#201914" }}
+                onFocus={(e) => { e.target.style.borderColor = "#2f5b4f"; e.target.style.boxShadow = "0 0 0 3px rgba(47,91,79,0.15)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "#ded2c3"; e.target.style.boxShadow = "none"; }}
                 placeholder="请输入邮箱"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: "#4c4037" }}>密码</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                className="w-full px-4 py-2 rounded-lg outline-none"
+                style={{ border: "1px solid #ded2c3", background: "#fffdf8", color: "#201914" }}
+                onFocus={(e) => { e.target.style.borderColor = "#2f5b4f"; e.target.style.boxShadow = "0 0 0 3px rgba(47,91,79,0.15)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "#ded2c3"; e.target.style.boxShadow = "none"; }}
                 placeholder="请输入密码（至少6位）"
                 required
                 minLength={6}
@@ -110,7 +118,10 @@ export default function AuthForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition disabled:opacity-50"
+              className="w-full py-3 rounded-lg font-medium transition disabled:opacity-50"
+              style={{ background: "#2f5b4f", color: "#ffffff", borderRadius: "10px" }}
+              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = "#274d43"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "#2f5b4f"; }}
             >
               {loading ? '请稍候...' : isLogin ? '登录' : '注册'}
             </button>
@@ -120,14 +131,17 @@ export default function AuthForm() {
             <button
               type="button"
               onClick={() => { setIsLogin(!isLogin); setError(''); setSuccess(''); }}
-              className="text-primary-600 hover:text-primary-700 text-sm"
+              className="text-sm transition"
+              style={{ color: "#2f5b4f" }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "#274d43"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "#2f5b4f"; }}
             >
               {isLogin ? '还没有账户？立即注册' : '已有账户？去登录'}
             </button>
           </div>
 
           {!isLogin && (
-            <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-lg text-sm">
+            <div className="mt-4 p-3 rounded-lg text-sm" style={{ background: "#f0f7f5", color: "#2f5b4f" }}>
               <p className="font-medium mb-1">注册说明：</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>注册后会收到验证邮件</li>
@@ -137,11 +151,14 @@ export default function AuthForm() {
             </div>
           )}
 
-          <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="mt-6 pt-6" style={{ borderTop: "1px solid #ded2c3" }}>
             <button
               type="button"
               onClick={() => { setUser(null, ''); window.location.reload(); }}
-              className="w-full py-2 text-gray-500 hover:text-gray-700 text-sm"
+              className="w-full py-2 text-sm transition"
+              style={{ color: "#7a6d63" }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "#4c4037"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "#7a6d63"; }}
             >
               暂不登录，先试试
             </button>

@@ -30,11 +30,11 @@ export default function MessageList({ messages, loading }: MessageListProps) {
 
       {loading && (
         <div className="flex justify-start">
-          <div className="bg-white rounded-2xl rounded-bl-sm shadow-sm px-4 py-3">
+          <div className="px-4 py-3" style={{ background: "#fffdf8", borderRadius: "16px 16px 16px 4px", border: "1px solid #ded2c3" }}>
             <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-75" />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150" />
+              <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: "#9b5b32", opacity: 0.5 }} />
+              <div className="w-2 h-2 rounded-full animate-bounce delay-75" style={{ background: "#9b5b32", opacity: 0.5 }} />
+              <div className="w-2 h-2 rounded-full animate-bounce delay-150" style={{ background: "#9b5b32", opacity: 0.5 }} />
             </div>
           </div>
         </div>
