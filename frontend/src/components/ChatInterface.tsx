@@ -61,7 +61,8 @@ export default function ChatInterface() {
   const loadSessions = async () => {
     try {
       const res = await chatAPI.listSessions(token ?? undefined);
-      if (res.data && Array.isArray(res.data)) setSessions(res.data);
+      const sessionsData = res.data?.sessions || res.data;
+      if (Array.isArray(sessionsData)) setSessions(sessionsData);
     } catch (err) {
       console.error('加载会话列表失败:', err);
     }
@@ -70,7 +71,8 @@ export default function ChatInterface() {
   const loadSessionHistory = async (sessionId: string) => {
     try {
       const res = await chatAPI.getHistory(sessionId);
-      if (res.data && Array.isArray(res.data)) setMessages(res.data);
+      const messagesData = res.data?.messages || res.data;
+      if (Array.isArray(messagesData)) setMessages(messagesData);
     } catch (err) {
       console.error('加载历史消息失败:', err);
     }
@@ -122,46 +124,93 @@ export default function ChatInterface() {
   };
 
   const handleSend = async (content: string) => {
-    if (!currentSessionId) await handleCreateSession();
+    if (!currentSessionId) {
+      await handleCreateSession();
+      // Wait a tick for state to update
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    const userMsgId = `temp-${Date.now()}`;
+    const assistantMsgId = `assistant-${Date.now()}`;
 
     addMessage({
-      id: `temp-${Date.now()}`,
+      id: userMsgId,
       role: 'user',
       content,
       timestamp: new Date().toISOString(),
     });
+
+    // Add placeholder assistant message
+    addMessage({
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+    });
+
     setLoading(true);
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-      const response = await fetch(`${API_URL}/api/v1/ai/chat`, {
+      const sid = currentSessionId || useStore.getState().currentSessionId;
+      if (!sid) throw new Error('No session');
+
+      const response = await fetch(`${API_URL}/api/v1/chat/sessions/${sid}/messages/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token && { Authorization: `Bearer ${token}` }),
         },
-        body: JSON.stringify({ message: content, session_id: currentSessionId }),
+        body: JSON.stringify({ message: content }),
       });
-      const data = await response.json();
 
-      if (response.ok) {
-        addMessage({
-          id: data.message_id || `msg-${Date.now()}`,
-          role: 'assistant',
-          content: data.reply,
-          timestamp: data.timestamp || new Date().toISOString(),
-        });
-        loadSessions();
-      } else {
-        throw new Error(data.error || data.detail || '请求失败');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullReply = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'delta' && data.text) {
+                fullReply += data.text;
+                const currentMessages = useStore.getState().messages;
+                setMessages(
+                  currentMessages.map(m =>
+                    m.id === assistantMsgId ? { ...m, content: fullReply } : m
+                  )
+                );
+              }
+            } catch {
+              // skip malformed JSON
+            }
+          }
+        }
+      }
+
+      // Final update
+      loadSessions();
     } catch {
-      addMessage({
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: '抱歉，我遇到了一些问题。请稍后再试。',
-        timestamp: new Date().toISOString(),
-      });
+      // Replace placeholder with error
+      const msgs = useStore.getState().messages.map(m =>
+        m.id === assistantMsgId
+          ? { ...m, content: '抱歉，我遇到了一些问题。请稍后再试。' }
+          : m
+      );
+      setMessages(msgs);
     } finally {
       setLoading(false);
     }

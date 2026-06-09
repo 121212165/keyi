@@ -26,7 +26,8 @@ interface AppState {
   // 用户
   user: User | null;
   token: string | null;
-  setUser: (user: User | null, token?: string) => void;
+  refreshToken: string | null;
+  setUser: (user: User | null, token?: string, refreshToken?: string) => void;
   logout: () => void;
 
   // 会话
@@ -55,19 +56,20 @@ interface AppState {
 export const useStore = create<AppState>((set) => ({
   user: null,
   token: null,
-  setUser: (user, token) => {
-    set({ user, token });
+  refreshToken: null,
+  setUser: (user, token, refreshToken) => {
+    set({ user, token, refreshToken: refreshToken ?? null });
     // 保存到 localStorage
     if (typeof window !== 'undefined') {
       if (user && token) {
-        localStorage.setItem('keyi-user', JSON.stringify({ user, token }));
+        localStorage.setItem('keyi-user', JSON.stringify({ user, token, refreshToken: refreshToken ?? null }));
       } else {
         localStorage.removeItem('keyi-user');
       }
     }
   },
   logout: () => {
-    set({ user: null, token: null, sessions: [], currentSessionId: null, messages: [] });
+    set({ user: null, token: null, refreshToken: null, sessions: [], currentSessionId: null, messages: [] });
     if (typeof window !== 'undefined') {
       localStorage.removeItem('keyi-user');
     }
@@ -98,7 +100,7 @@ export const useStore = create<AppState>((set) => ({
 }));
 
 // 从 localStorage 恢复数据
-export function restoreUser(): { user: User | null; token: string | null } | null {
+export function restoreUser(): { user: User | null; token: string | null; refreshToken: string | null } | null {
   if (typeof window === 'undefined') return null;
 
   try {

@@ -18,6 +18,23 @@ export async function POST(
       })
     }
 
+    // 验证认证令牌
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: '未提供认证令牌' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    const token = authHeader.slice(7)
+    const { data: userData, error: authError } = await supabaseAdmin().auth.getUser(token)
+    if (authError || !userData.user) {
+      return new Response(JSON.stringify({ error: '认证失败，请重新登录' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     // 获取会话信息
     const { data: session, error: sessionError } = await supabaseAdmin()
       .from('chat_sessions')

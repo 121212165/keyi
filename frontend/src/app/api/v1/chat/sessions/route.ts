@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      session_id: sessionId,
+      id: sessionId,
       therapy_mode: therapyMode,
     })
   } catch (e) {
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: '获取会话列表失败' }, { status: 500 })
     }
 
-    return NextResponse.json({ sessions: sessions || [] })
+    return NextResponse.json(sessions || [])
   } catch (e) {
     console.error('GET sessions error:', e)
     return NextResponse.json({ error: '获取会话列表失败' }, { status: 500 })
