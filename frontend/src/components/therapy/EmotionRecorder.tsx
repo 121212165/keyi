@@ -72,8 +72,8 @@ export default function EmotionRecorder() {
   const dayLabels = ['一', '二', '三', '四', '五', '六', '日'];
 
   return (
-    <div className="p-3 border-t border-gray-200">
-      <p className="text-xs text-gray-500 mb-2 text-center">
+    <div className="p-3" style={{ borderTop: "1px solid #ded2c3" }}>
+      <p className="text-xs mb-2 text-center" style={{ color: "#7a6d63" }}>
         {todayRecorded ? '今日已记录 ✓' : '今天心情如何？'}
       </p>
 
@@ -83,7 +83,10 @@ export default function EmotionRecorder() {
             <button
               key={level.score}
               onClick={() => handleRecord(level.score)}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-lg"
+              className="w-8 h-8 flex items-center justify-center transition text-lg"
+              style={{ borderRadius: "9999px" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#f1e3cf"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               title={level.label}
             >
               {level.emoji}
@@ -105,7 +108,7 @@ export default function EmotionRecorder() {
                     ? EMOTION_LEVELS.find((l) => l.score === record.score)?.emoji || '·'
                     : '·'}
                 </div>
-                <span className="text-[10px] text-gray-400">{dayOfWeek}</span>
+                <span className="text-[10px]" style={{ color: "#9b5b32", opacity: 0.5 }}>{dayOfWeek}</span>
               </div>
             );
           })}

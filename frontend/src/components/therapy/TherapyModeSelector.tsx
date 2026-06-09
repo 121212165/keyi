@@ -36,21 +36,28 @@ interface TherapyModeSelectorProps {
 export default function TherapyModeSelector({ selectedMode, onSelect }: TherapyModeSelectorProps) {
   return (
     <div className="flex gap-2 px-4 py-2">
-      {THERAPY_MODES.map((mode) => (
-        <button
-          key={mode.id}
-          onClick={() => onSelect(mode.id)}
-          className={`px-3 py-1.5 rounded-full text-sm transition ${
-            selectedMode === mode.id
-              ? 'bg-primary-600 text-white shadow-sm'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-          title={mode.description}
-        >
-          <span className="mr-1">{mode.icon}</span>
-          {mode.name}
-        </button>
-      ))}
+      {THERAPY_MODES.map((mode) => {
+        const isActive = selectedMode === mode.id;
+        return (
+          <button
+            key={mode.id}
+            onClick={() => onSelect(mode.id)}
+            className="px-3 py-1.5 text-sm transition"
+            style={{
+              borderRadius: "9999px",
+              background: isActive ? "#2f5b4f" : "#f1e3cf",
+              color: isActive ? "#ffffff" : "#4c4037",
+              border: "none",
+            }}
+            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "#e8d5bc"; }}
+            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "#f1e3cf"; }}
+            title={mode.description}
+          >
+            <span className="mr-1">{mode.icon}</span>
+            {mode.name}
+          </button>
+        );
+      })}
     </div>
   );
 }

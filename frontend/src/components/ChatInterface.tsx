@@ -28,7 +28,7 @@ interface Session {
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: '你好，我是可意，一个温暖、专业、有同理心的AI心理医生。\n\n在这里，你可以畅所欲言，我会用心倾听、陪伴和支持你。\n\n今天有什么想聊的吗？',
+  content: '你好，我是林序，一个温暖、专业、有同理心的AI心理医生。\n\n在这里，你可以畅所欲言，我会用心倾听、陪伴和支持你。\n\n今天有什么想聊的吗？',
   timestamp: new Date().toISOString(),
 };
 
@@ -176,9 +176,12 @@ export default function ChatInterface() {
     <div className="flex h-screen">
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="absolute top-4 left-4 z-10 p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition"
+        className="absolute top-4 left-4 z-10 p-2 transition"
+        style={{ background: "#fffdf8", borderRadius: "10px", boxShadow: "0 4px 24px rgba(32,25,20,0.08)", border: "1px solid #ded2c3" }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "#f1e3cf"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "#fffdf8"; }}
       >
-        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" fill="none" stroke="#4c4037" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
@@ -196,7 +199,7 @@ export default function ChatInterface() {
         />
       )}
 
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col" style={{ background: "#fbf6ee" }}>
         <TherapyModeSelector selectedMode={therapyMode} onSelect={setTherapyMode} />
         {showTriadForm && therapyMode === 'cbt' && (
           <CognitiveTriadForm
@@ -221,9 +224,12 @@ export default function ChatInterface() {
           <div className="px-4 py-1 flex justify-center">
             <button
               onClick={() => setShowTriadForm(!showTriadForm)}
-              className="text-xs text-primary-600 hover:text-primary-700 px-3 py-1 rounded-full border border-primary-200 hover:bg-primary-50 transition"
+              className="text-xs px-3 py-1 transition"
+              style={{ color: "#2f5b4f", borderRadius: "9999px", border: "1px solid rgba(47,91,79,0.2)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(47,91,79,0.06)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              🧠 记录认知三角
+              记录认知三角
             </button>
           </div>
         )}
@@ -231,9 +237,12 @@ export default function ChatInterface() {
           <div className="px-4 py-1 flex justify-center">
             <button
               onClick={() => setShowDesensitizePanel(!showDesensitizePanel)}
-              className="text-xs text-primary-600 hover:text-primary-700 px-3 py-1 rounded-full border border-primary-200 hover:bg-primary-50 transition"
+              className="text-xs px-3 py-1 transition"
+              style={{ color: "#2f5b4f", borderRadius: "9999px", border: "1px solid rgba(47,91,79,0.2)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(47,91,79,0.06)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              🌊 脱敏训练面板
+              脱敏训练面板
             </button>
           </div>
         )}

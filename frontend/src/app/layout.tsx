@@ -1,20 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "可意AI - 温暖专业的心理助手",
-  description: "可意AI心理医生，温暖、专业、有同理心的AI心理健康助手",
+  title: "林序 · AI 心理陪伴",
+  description: "林序，温暖专业的AI心理健康助手",
 };
 
 export default function RootLayout({
@@ -24,10 +13,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <div className="min-h-screen bg-gradient-to-b from-warm-50 to-white">
+      <body className="antialiased">
+        <div className="min-h-screen" style={{ background: "#fbf6ee" }}>
           {children}
         </div>
       </body>

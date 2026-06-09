@@ -9,7 +9,6 @@ export default function Home() {
   const { user, token, setUser } = useStore();
   const [mounted, setMounted] = useState(false);
 
-  // 只在客户端挂载后恢复用户状态
   useEffect(() => {
     setMounted(true);
     if (!token && !user) {
@@ -20,13 +19,14 @@ export default function Home() {
     }
   }, [setUser, token, user]);
 
-  // 避免服务端渲染不匹配
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-warm-50 to-white">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#fbf6ee" }}>
         <div className="text-center">
-          <div className="text-4xl font-bold text-primary-600 mb-4">可意</div>
-          <div className="text-gray-500">加载中...</div>
+          <div className="mb-4" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "2.5rem", fontWeight: 400, color: "#2f5b4f", letterSpacing: "-0.02em" }}>
+            林序
+          </div>
+          <div style={{ color: "#7a6d63" }}>加载中...</div>
         </div>
       </div>
     );
