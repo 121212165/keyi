@@ -54,7 +54,7 @@ export async function GET(
       emotion: msg.emotion,
     }))
 
-    return NextResponse.json({ messages: formattedMessages })
+    return NextResponse.json(formattedMessages)
   } catch (e) {
     console.error('GET history error:', e)
     return NextResponse.json({ error: '获取消息历史失败' }, { status: 500 })

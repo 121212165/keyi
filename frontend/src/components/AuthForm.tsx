@@ -3,6 +3,25 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 
+async function refreshTokenIfNeeded(token: string | null, refreshToken: string | null): Promise<string | null> {
+  if (!token || !refreshToken) return token;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expiresAt = payload.exp * 1000;
+    if (Date.now() < expiresAt - 60000) return token; // still valid (1min buffer)
+    const res = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.access_token;
+    }
+  } catch {}
+  return token;
+}
+
 export default function AuthForm() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -47,7 +66,7 @@ export default function AuthForm() {
         throw new Error(msg);
       }
 
-      setUser(data.user || { id: '', email }, data.access_token);
+      setUser(data.user || { id: '', email }, data.access_token, data.refresh_token);
       window.location.reload();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '操作失败');
