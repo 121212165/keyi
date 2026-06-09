@@ -29,7 +29,7 @@ const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
   content: '你好，我是林序，一个温暖、专业、有同理心的AI心理医生。\n\n在这里，你可以畅所欲言，我会用心倾听、陪伴和支持你。\n\n今天有什么想聊的吗？',
-  timestamp: new Date().toISOString(),
+  timestamp: '2026-01-01T00:00:00.000Z',
 };
 
 export default function ChatInterface() {
