@@ -41,7 +41,7 @@ export default function ChatInterface() {
   } = useStore();
 
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [therapyMode, setTherapyMode] = useState('general');
   const [showTriadForm, setShowTriadForm] = useState(false);
@@ -126,28 +126,14 @@ export default function ChatInterface() {
   const handleSend = async (content: string) => {
     if (!currentSessionId) {
       await handleCreateSession();
-      // Wait a tick for state to update
       await new Promise(r => setTimeout(r, 100));
     }
 
     const userMsgId = `temp-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
 
-    addMessage({
-      id: userMsgId,
-      role: 'user',
-      content,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Add placeholder assistant message
-    addMessage({
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date().toISOString(),
-    });
-
+    addMessage({ id: userMsgId, role: 'user', content, timestamp: new Date().toISOString() });
+    addMessage({ id: assistantMsgId, role: 'assistant', content: '', timestamp: new Date().toISOString() });
     setLoading(true);
 
     try {
@@ -157,16 +143,11 @@ export default function ChatInterface() {
 
       const response = await fetch(`${API_URL}/api/v1/chat/sessions/${sid}/messages/stream`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
+        headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
         body: JSON.stringify({ message: content }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
@@ -176,22 +157,16 @@ export default function ChatInterface() {
 
       const flushUI = () => {
         const currentMessages = useStore.getState().messages;
-        setMessages(
-          currentMessages.map(m =>
-            m.id === assistantMsgId ? { ...m, content: fullReply } : m
-          )
-        );
+        setMessages(currentMessages.map(m => m.id === assistantMsgId ? { ...m, content: fullReply } : m));
         rafId = 0;
       };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
-
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
@@ -200,9 +175,7 @@ export default function ChatInterface() {
                 fullReply += data.text;
                 if (!rafId) rafId = requestAnimationFrame(flushUI);
               }
-            } catch {
-              // skip malformed JSON
-            }
+            } catch { /* skip */ }
           }
         }
       }
@@ -211,11 +184,8 @@ export default function ChatInterface() {
       flushUI();
       loadSessions();
     } catch {
-      // Replace placeholder with error
       const msgs = useStore.getState().messages.map(m =>
-        m.id === assistantMsgId
-          ? { ...m, content: '抱歉，我遇到了一些问题。请稍后再试。' }
-          : m
+        m.id === assistantMsgId ? { ...m, content: '抱歉，我遇到了一些问题。请稍后再试。' } : m
       );
       setMessages(msgs);
     } finally {
@@ -223,85 +193,102 @@ export default function ChatInterface() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    window.location.reload();
+  const handleLogout = () => { logout(); window.location.reload(); };
+
+  const sidebarProps = {
+    sessions, currentSessionId, isCreatingSession,
+    onCreateSession: handleCreateSession,
+    onSelectSession: handleSelectSession,
+    onDeleteSession: handleDeleteSession,
+    user, onLogout: handleLogout,
   };
 
   return (
-    <div className="flex h-screen">
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="absolute top-4 left-4 z-10 p-2 transition"
-        style={{ background: "#fffdf8", borderRadius: "10px", boxShadow: "0 4px 24px rgba(32,25,20,0.08)", border: "1px solid #ded2c3" }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "#f1e3cf"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "#fffdf8"; }}
-      >
-        <svg className="w-5 h-5" fill="none" stroke="#4c4037" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
-
+    <div className="flex h-screen" style={{ background: '#fbf6ee' }}>
+      {/* Mobile overlay */}
       {sidebarOpen && (
-        <Sidebar
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          isCreatingSession={isCreatingSession}
-          onCreateSession={handleCreateSession}
-          onSelectSession={handleSelectSession}
-          onDeleteSession={handleDeleteSession}
-          user={user}
-          onLogout={handleLogout}
-        />
+        <div className="drawer-overlay active md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <main className="flex-1 flex flex-col" style={{ background: "#fbf6ee" }}>
-        <TherapyModeSelector selectedMode={therapyMode} onSelect={setTherapyMode} />
+      {/* Mobile drawer sidebar */}
+      <div className="md:hidden" style={{ position: 'fixed', inset: '0', pointerEvents: sidebarOpen ? 'auto' : 'none', zIndex: 50 }}>
+        <div
+          style={{
+            position: 'absolute', inset: '0', left: 'auto', width: '280px',
+            background: '#f8f3ea', borderRight: '1px solid #ded2c3',
+            transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+            transition: 'transform 300ms cubic-bezier(0.23, 1, 0.32, 1)',
+          }}
+        >
+          <Sidebar {...sidebarProps} isMobileDrawer onClose={() => setSidebarOpen(false)} />
+        </div>
+      </div>
+
+      {/* PC sidebar */}
+      <Sidebar {...sidebarProps} />
+
+      {/* Main area */}
+      <main className="flex-1 flex flex-col min-w-0" style={{ background: '#fbf6ee' }}>
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid #ded2c3' }}>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 transition"
+            style={{ background: 'transparent', border: 'none', color: '#4c4037' }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: '1.1rem', color: '#2f5b4f' }}>林序</span>
+          <TherapyModeSelector selectedMode={therapyMode} onSelect={setTherapyMode} />
+        </div>
+
+        {/* PC mode tabs */}
+        <div className="hidden md:block">
+          <TherapyModeSelector selectedMode={therapyMode} onSelect={setTherapyMode} />
+        </div>
+
+        {/* Therapy panels (collapsible) */}
         {showTriadForm && therapyMode === 'cbt' && (
-          <CognitiveTriadForm
-            onSubmit={(data) => {
-              handleSend(`[认知三角记录]\n想法：${data.thought}\n感受：${data.feeling}\n行为：${data.behavior}`);
-              setShowTriadForm(false);
-            }}
-            onClose={() => setShowTriadForm(false)}
-          />
+          <div style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%', padding: '0 16px' }}>
+            <CognitiveTriadForm
+              onSubmit={(data) => {
+                handleSend(`[认知三角记录]\n想法：${data.thought}\n感受：${data.feeling}\n行为：${data.behavior}`);
+                setShowTriadForm(false);
+              }}
+              onClose={() => setShowTriadForm(false)}
+            />
+          </div>
         )}
         {showDesensitizePanel && therapyMode === 'desensitize' && (
-          <DesensitizePanel
-            onSubmit={(message) => {
-              handleSend(message);
-              setShowDesensitizePanel(false);
-            }}
-            onClose={() => setShowDesensitizePanel(false)}
-          />
+          <div style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%', padding: '0 16px' }}>
+            <DesensitizePanel
+              onSubmit={(message) => { handleSend(message); setShowDesensitizePanel(false); }}
+              onClose={() => setShowDesensitizePanel(false)}
+            />
+          </div>
         )}
+
+        {/* Messages */}
         <MessageList messages={messages} loading={loading} />
-        {therapyMode === 'cbt' && (
-          <div className="px-4 py-1 flex justify-center">
+
+        {/* Therapy action buttons */}
+        {(therapyMode === 'cbt' || therapyMode === 'desensitize') && (
+          <div style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%', padding: '4px 16px' }} className="flex justify-center">
             <button
-              onClick={() => setShowTriadForm(!showTriadForm)}
+              onClick={() => therapyMode === 'cbt' ? setShowTriadForm(!showTriadForm) : setShowDesensitizePanel(!showDesensitizePanel)}
               className="text-xs px-3 py-1 transition"
-              style={{ color: "#2f5b4f", borderRadius: "9999px", border: "1px solid rgba(47,91,79,0.2)" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(47,91,79,0.06)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              style={{ color: '#2f5b4f', borderRadius: '9999px', border: '1px solid rgba(47,91,79,0.2)', background: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(47,91,79,0.06)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              记录认知三角
+              {therapyMode === 'cbt' ? '记录认知三角' : '脱敏训练面板'}
             </button>
           </div>
         )}
-        {therapyMode === 'desensitize' && (
-          <div className="px-4 py-1 flex justify-center">
-            <button
-              onClick={() => setShowDesensitizePanel(!showDesensitizePanel)}
-              className="text-xs px-3 py-1 transition"
-              style={{ color: "#2f5b4f", borderRadius: "9999px", border: "1px solid rgba(47,91,79,0.2)" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(47,91,79,0.06)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            >
-              脱敏训练面板
-            </button>
-          </div>
-        )}
+
+        {/* Input */}
         <ChatInput onSend={handleSend} loading={loading} />
       </main>
     </div>

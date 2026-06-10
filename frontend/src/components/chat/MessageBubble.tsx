@@ -28,8 +28,12 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[70%] px-4 py-3 ${isUser ? 'chat-bubble-user' : 'chat-bubble-assistant'}`}
-        style={{ whiteSpace: 'pre-wrap' }}
+        className={`px-4 py-3 ${isUser ? 'chat-bubble-user' : 'chat-bubble-assistant'}`}
+        style={{
+          whiteSpace: 'pre-wrap',
+          maxWidth: isUser ? 'min(70%, 480px)' : '100%',
+          wordBreak: 'break-word',
+        }}
       >
         {displayContent}
         {isUser && (
