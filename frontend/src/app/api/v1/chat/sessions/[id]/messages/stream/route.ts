@@ -55,7 +55,7 @@ export async function POST(
       .select('role, content')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-      .limit(50)
+      .limit(20)
 
     // 构建消息数组
     const messages = [
@@ -77,7 +77,7 @@ export async function POST(
       })
     }
 
-    const llmRes = await fetch(`${llmBase}/v1/messages`, {
+    let llmRes = await fetch(`${llmBase}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -86,17 +86,54 @@ export async function POST(
       },
       body: JSON.stringify({
         model: process.env.LLM_MODEL || 'claude-sonnet-4-20250514',
-        max_tokens: 2048,
+        max_tokens: 1024,
         system: systemPrompt,
         messages,
         stream: true,
       }),
     })
 
-    if (!llmRes.ok || !llmRes.body) {
+    // Retry on transient failures
+    if (!llmRes.ok) {
       const errText = await llmRes.text().catch(() => '')
       console.error('LLM 流式请求失败:', llmRes.status, errText)
-      return new Response(JSON.stringify({ error: 'AI 服务暂时不可用，请稍后重试' }), {
+
+      // Retry once on 429/500/502/503
+      if ([429, 500, 502, 503].includes(llmRes.status)) {
+        await new Promise(r => setTimeout(r, 2000))
+        const retryRes = await fetch(`${llmBase}/v1/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': llmKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: process.env.LLM_MODEL || 'claude-sonnet-4-20250514',
+            max_tokens: 1024,
+            system: systemPrompt,
+            messages,
+            stream: true,
+          }),
+        })
+        if (retryRes.ok && retryRes.body) {
+          llmRes = retryRes
+        } else {
+          return new Response(JSON.stringify({ error: 'AI 服务暂时繁忙，请稍后再试' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+      } else {
+        return new Response(JSON.stringify({ error: 'AI 服务暂时不可用，请稍后重试' }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    if (!llmRes.body) {
+      return new Response(JSON.stringify({ error: 'AI 服务暂时不可用' }), {
         status: 502,
         headers: { 'Content-Type': 'application/json' },
       })

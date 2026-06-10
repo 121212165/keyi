@@ -172,6 +172,17 @@ export default function ChatInterface() {
       const decoder = new TextDecoder();
       let buffer = '';
       let fullReply = '';
+      let rafId = 0;
+
+      const flushUI = () => {
+        const currentMessages = useStore.getState().messages;
+        setMessages(
+          currentMessages.map(m =>
+            m.id === assistantMsgId ? { ...m, content: fullReply } : m
+          )
+        );
+        rafId = 0;
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -187,12 +198,7 @@ export default function ChatInterface() {
               const data = JSON.parse(line.slice(6));
               if (data.type === 'delta' && data.text) {
                 fullReply += data.text;
-                const currentMessages = useStore.getState().messages;
-                setMessages(
-                  currentMessages.map(m =>
-                    m.id === assistantMsgId ? { ...m, content: fullReply } : m
-                  )
-                );
+                if (!rafId) rafId = requestAnimationFrame(flushUI);
               }
             } catch {
               // skip malformed JSON
@@ -201,7 +207,8 @@ export default function ChatInterface() {
         }
       }
 
-      // Final update
+      if (rafId) cancelAnimationFrame(rafId);
+      flushUI();
       loadSessions();
     } catch {
       // Replace placeholder with error
