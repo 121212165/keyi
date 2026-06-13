@@ -91,16 +91,4 @@ body {
   pointer-events: auto;
 }
 
-/* Mode selector dropdown */
-.mode-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 200px;
-  background: #fffdf8;
-  border: 1px solid #ded2c3;
-  border-radius: 12px;
-  box-shadow: 0 20px 52px rgba(32, 25, 20, 0.12);
-  z-index: 50;
-  overflow: hidden;
-}
+

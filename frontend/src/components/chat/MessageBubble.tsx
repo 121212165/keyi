@@ -1,8 +1,5 @@
 'use client';
 
-import dayjs from 'dayjs';
-import ANTsMarker from '../therapy/ANTsMarker';
-
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -14,16 +11,10 @@ interface MessageBubbleProps {
   message: Message;
 }
 
-function stripInternalTags(content: string): string {
-  return content
-    .replace(/<THERAPY_RECORD>[\s\S]*?<\/THERAPY_RECORD>/g, '')
-    .replace(/<DESENSITIZE_RECORD>[\s\S]*?<\/DESENSITIZE_RECORD>/g, '')
-    .trim();
-}
-
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
-  const displayContent = isUser ? message.content : stripInternalTags(message.content);
+  const time = new Date(message.timestamp);
+  const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -35,17 +26,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           wordBreak: 'break-word',
         }}
       >
-        {displayContent}
-        {isUser && (
-          <ANTsMarker
-            messageContent={message.content}
-            onMark={(content, type) => {
-              console.log('ANT marked:', type, content.substring(0, 50));
-            }}
-          />
-        )}
+        {message.content}
         <div className="text-xs mt-1 text-right" style={{ opacity: 0.6 }}>
-          {dayjs(message.timestamp).format('HH:mm')}
+          {timeStr}
         </div>
       </div>
     </div>

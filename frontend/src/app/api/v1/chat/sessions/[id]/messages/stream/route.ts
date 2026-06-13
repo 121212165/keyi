@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
 import { buildSystemPrompt } from '@/lib/prompts'
+import { detectCrisis } from '@/lib/safety'
 
 export async function POST(
   req: Request,
@@ -18,7 +19,17 @@ export async function POST(
       })
     }
 
-    // 验证认证令牌
+    const crisis = detectCrisis(message)
+    if (crisis) {
+      return new Response(JSON.stringify({
+        type: 'crisis',
+        message: crisis.response,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const authHeader = req.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: '未提供认证令牌' }), {
@@ -35,7 +46,6 @@ export async function POST(
       })
     }
 
-    // 获取会话信息
     const { data: session, error: sessionError } = await supabaseAdmin()
       .from('chat_sessions')
       .select('*')
@@ -49,7 +59,6 @@ export async function POST(
       })
     }
 
-    // 获取历史消息
     const { data: history } = await supabaseAdmin()
       .from('messages')
       .select('role, content')
@@ -57,16 +66,13 @@ export async function POST(
       .order('created_at', { ascending: true })
       .limit(20)
 
-    // 构建消息数组
     const messages = [
       ...(history || []),
       { role: 'user', content: message },
     ]
 
-    // 构建系统提示词
     const systemPrompt = buildSystemPrompt(session.therapy_mode || 'general')
 
-    // 调用 LLM API (streaming)
     const llmBase = process.env.LLM_BASE_URL
     const llmKey = process.env.LLM_API_KEY
 
@@ -93,12 +99,10 @@ export async function POST(
       }),
     })
 
-    // Retry on transient failures
     if (!llmRes.ok) {
       const errText = await llmRes.text().catch(() => '')
       console.error('LLM 流式请求失败:', llmRes.status, errText)
 
-      // Retry once on 429/500/502/503
       if ([429, 500, 502, 503].includes(llmRes.status)) {
         await new Promise(r => setTimeout(r, 2000))
         const retryRes = await fetch(`${llmBase}/v1/messages`, {
@@ -139,13 +143,11 @@ export async function POST(
       })
     }
 
-    // 保存会话上下流
     const userMessageId = crypto.randomUUID()
     const assistantMessageId = crypto.randomUUID()
     const now = new Date().toISOString()
     let fullReply = ''
 
-    // 创建 SSE 流
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
@@ -153,7 +155,6 @@ export async function POST(
         const decoder = new TextDecoder()
         let buffer = ''
 
-        // 发送消息 ID 事件
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'message_start', message_id: userMessageId, reply_id: assistantMessageId })}\n\n`)
         )
@@ -176,7 +177,6 @@ export async function POST(
               try {
                 const event = JSON.parse(jsonStr)
 
-                // Anthropic SSE: content_block_delta 事件包含文本增量
                 if (event.type === 'content_block_delta' && event.delta?.text) {
                   fullReply += event.delta.text
                   controller.enqueue(
@@ -184,14 +184,13 @@ export async function POST(
                   )
                 }
 
-                // message_stop 表示流结束
                 if (event.type === 'message_stop') {
                   controller.enqueue(
                     encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
                   )
                 }
               } catch {
-                // 跳过格式错误的数据行
+                // skip malformed data
               }
             }
           }
@@ -203,7 +202,6 @@ export async function POST(
         } finally {
           controller.close()
 
-          // 流结束后保存消息到数据库
           try {
             await supabaseAdmin().from('messages').insert({
               id: userMessageId,
