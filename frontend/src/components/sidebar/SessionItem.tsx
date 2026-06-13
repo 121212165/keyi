@@ -1,12 +1,5 @@
 'use client';
 
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-import 'dayjs/locale/zh-cn';
-
-dayjs.extend(relativeTime);
-dayjs.locale('zh-cn');
-
 interface Session {
   id: string;
   title: string;
@@ -27,6 +20,21 @@ function getSessionTitle(session: Session): string {
     return session.title.length > 15 ? session.title.substring(0, 15) + '...' : session.title;
   }
   return '新的对话';
+}
+
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return '刚刚';
+  if (mins < 60) return `${mins}分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}天前`;
+  const months = Math.floor(days / 30);
+  return `${months}个月前`;
 }
 
 export default function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
@@ -59,7 +67,7 @@ export default function SessionItem({ session, isActive, onSelect, onDelete }: S
         </button>
       </div>
       <div className="text-xs mt-1" style={{ color: "#9b5b32", opacity: 0.6 }}>
-        {dayjs(session.updated_at || session.started_at).fromNow()}
+        {relativeTime(session.updated_at || session.started_at)}
       </div>
     </div>
   );

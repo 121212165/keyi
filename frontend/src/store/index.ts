@@ -44,12 +44,6 @@ interface AppState {
   addMessage: (message: Message) => void;
   clearMessages: () => void;
 
-  // UI 状态
-  isLoading: boolean;
-  setLoading: (loading: boolean) => void;
-
-  // 持久化
-  _persist: any;
 }
 
 // 创建 store（不使用持久化，在组件中手动处理）
@@ -93,10 +87,6 @@ export const useStore = create<AppState>((set) => ({
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   clearMessages: () => set({ messages: [] }),
 
-  isLoading: false,
-  setLoading: (loading) => set({ isLoading: loading }),
-
-  _persist: null,
 }));
 
 // 从 localStorage 恢复数据
