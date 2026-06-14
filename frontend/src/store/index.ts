@@ -26,7 +26,8 @@ interface AppState {
   // 用户
   user: User | null;
   token: string | null;
-  setUser: (user: User | null, token?: string) => void;
+  refreshToken: string | null;
+  setUser: (user: User | null, token?: string, refreshToken?: string) => void;
   logout: () => void;
 
   // 会话
@@ -43,31 +44,26 @@ interface AppState {
   addMessage: (message: Message) => void;
   clearMessages: () => void;
 
-  // UI 状态
-  isLoading: boolean;
-  setLoading: (loading: boolean) => void;
-
-  // 持久化
-  _persist: any;
 }
 
 // 创建 store（不使用持久化，在组件中手动处理）
 export const useStore = create<AppState>((set) => ({
   user: null,
   token: null,
-  setUser: (user, token) => {
-    set({ user, token });
+  refreshToken: null,
+  setUser: (user, token, refreshToken) => {
+    set({ user, token, refreshToken: refreshToken ?? null });
     // 保存到 localStorage
     if (typeof window !== 'undefined') {
       if (user && token) {
-        localStorage.setItem('keyi-user', JSON.stringify({ user, token }));
+        localStorage.setItem('keyi-user', JSON.stringify({ user, token, refreshToken: refreshToken ?? null }));
       } else {
         localStorage.removeItem('keyi-user');
       }
     }
   },
   logout: () => {
-    set({ user: null, token: null, sessions: [], currentSessionId: null, messages: [] });
+    set({ user: null, token: null, refreshToken: null, sessions: [], currentSessionId: null, messages: [] });
     if (typeof window !== 'undefined') {
       localStorage.removeItem('keyi-user');
     }
@@ -91,14 +87,10 @@ export const useStore = create<AppState>((set) => ({
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   clearMessages: () => set({ messages: [] }),
 
-  isLoading: false,
-  setLoading: (loading) => set({ isLoading: loading }),
-
-  _persist: null,
 }));
 
 // 从 localStorage 恢复数据
-export function restoreUser(): { user: User | null; token: string | null } | null {
+export function restoreUser(): { user: User | null; token: string | null; refreshToken: string | null } | null {
   if (typeof window === 'undefined') return null;
 
   try {
