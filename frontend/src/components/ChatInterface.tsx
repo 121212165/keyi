@@ -2,13 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
-import { chatAPI } from '@/lib/api';
 import Sidebar from './sidebar/Sidebar';
 import MessageList from './chat/MessageList';
 import ChatInput from './chat/ChatInput';
-import TherapyModeSelector from './therapy/TherapyModeSelector';
-import CognitiveTriadForm from './therapy/CognitiveTriadForm';
-import DesensitizePanel from './therapy/DesensitizePanel';
 
 interface Message {
   id: string;
@@ -28,9 +24,19 @@ interface Session {
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: '你好，我是可意，一个温暖、专业、有同理心的AI心理医生。\n\n在这里，你可以畅所欲言，我会用心倾听、陪伴和支持你。\n\n今天有什么想聊的吗？',
-  timestamp: new Date().toISOString(),
+  content: '你好，我是林序，一个温暖、专业、有同理心的AI心理医生。\n\n在这里，你可以畅所欲言，我会用心倾听、陪伴和支持你。\n\n今天有什么想聊的吗？',
+  timestamp: '2026-01-01T00:00:00.000Z',
 };
+
+const THERAPY_MODES = [
+  { id: 'general', name: '自由对话' },
+  { id: 'cbt', name: 'CBT认知疗法' },
+  { id: 'desensitize', name: '系统脱敏' },
+];
+
+function authHeaders(token?: string | null): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export default function ChatInterface() {
   const {
@@ -41,11 +47,9 @@ export default function ChatInterface() {
   } = useStore();
 
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [therapyMode, setTherapyMode] = useState('general');
-  const [showTriadForm, setShowTriadForm] = useState(false);
-  const [showDesensitizePanel, setShowDesensitizePanel] = useState(false);
 
   useEffect(() => {
     if (token) loadSessions();
@@ -60,8 +64,10 @@ export default function ChatInterface() {
 
   const loadSessions = async () => {
     try {
-      const res = await chatAPI.listSessions(token ?? undefined);
-      if (res.data && Array.isArray(res.data)) setSessions(res.data);
+      const res = await fetch('/api/v1/chat/sessions', { headers: authHeaders(token) });
+      const data = await res.json();
+      const sessionsData = data?.sessions || data;
+      if (Array.isArray(sessionsData)) setSessions(sessionsData);
     } catch (err) {
       console.error('加载会话列表失败:', err);
     }
@@ -69,8 +75,10 @@ export default function ChatInterface() {
 
   const loadSessionHistory = async (sessionId: string) => {
     try {
-      const res = await chatAPI.getHistory(sessionId);
-      if (res.data && Array.isArray(res.data)) setMessages(res.data);
+      const res = await fetch(`/api/v1/chat/sessions/${sessionId}/history`);
+      const data = await res.json();
+      const messagesData = data?.messages || data;
+      if (Array.isArray(messagesData)) setMessages(messagesData);
     } catch (err) {
       console.error('加载历史消息失败:', err);
     }
@@ -80,10 +88,15 @@ export default function ChatInterface() {
     if (isCreatingSession) return;
     setIsCreatingSession(true);
     try {
-      const res = await chatAPI.createSession(token ?? undefined, therapyMode);
-      if (res.data && res.data.id) {
+      const res = await fetch('/api/v1/chat/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ therapy_mode: therapyMode }),
+      });
+      const data = await res.json();
+      if (data && data.id) {
         const newSession: Session = {
-          id: res.data.id,
+          id: data.id,
           title: '新对话',
           started_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -110,7 +123,10 @@ export default function ChatInterface() {
     e.stopPropagation();
     if (!confirm('确定要删除这个对话吗？')) return;
     try {
-      await chatAPI.deleteSession(sessionId, token ?? undefined);
+      await fetch(`/api/v1/chat/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      });
       removeSession(sessionId);
       if (currentSessionId === sessionId) {
         clearMessages();
@@ -122,121 +138,150 @@ export default function ChatInterface() {
   };
 
   const handleSend = async (content: string) => {
-    if (!currentSessionId) await handleCreateSession();
+    if (!currentSessionId) {
+      await handleCreateSession();
+      await new Promise(r => setTimeout(r, 100));
+    }
 
-    addMessage({
-      id: `temp-${Date.now()}`,
-      role: 'user',
-      content,
-      timestamp: new Date().toISOString(),
-    });
+    const userMsgId = `temp-${Date.now()}`;
+    const assistantMsgId = `assistant-${Date.now()}`;
+
+    addMessage({ id: userMsgId, role: 'user', content, timestamp: new Date().toISOString() });
+    addMessage({ id: assistantMsgId, role: 'assistant', content: '', timestamp: new Date().toISOString() });
     setLoading(true);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${API_URL}/api/v1/ai/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ message: content, session_id: currentSessionId }),
-      });
-      const data = await response.json();
+      const sid = currentSessionId || useStore.getState().currentSessionId;
+      if (!sid) throw new Error('No session');
 
-      if (response.ok) {
-        addMessage({
-          id: data.message_id || `msg-${Date.now()}`,
-          role: 'assistant',
-          content: data.reply,
-          timestamp: data.timestamp || new Date().toISOString(),
-        });
-        loadSessions();
-      } else {
-        throw new Error(data.detail || '请求失败');
-      }
-    } catch {
-      addMessage({
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: '抱歉，我遇到了一些问题。请稍后再试。',
-        timestamp: new Date().toISOString(),
+      const response = await fetch(`/api/v1/chat/sessions/${sid}/messages/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ message: content }),
       });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullReply = '';
+      let rafId = 0;
+
+      const flushUI = () => {
+        const currentMessages = useStore.getState().messages;
+        setMessages(currentMessages.map(m => m.id === assistantMsgId ? { ...m, content: fullReply } : m));
+        rafId = 0;
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'delta' && data.text) {
+                fullReply += data.text;
+                if (!rafId) rafId = requestAnimationFrame(flushUI);
+              }
+            } catch { /* skip */ }
+          }
+        }
+      }
+
+      if (rafId) cancelAnimationFrame(rafId);
+      flushUI();
+      loadSessions();
+    } catch {
+      const msgs = useStore.getState().messages.map(m =>
+        m.id === assistantMsgId ? { ...m, content: '抱歉，我遇到了一些问题。请稍后再试。' } : m
+      );
+      setMessages(msgs);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    window.location.reload();
+  const handleLogout = () => { logout(); window.location.reload(); };
+
+  const sidebarProps = {
+    sessions, currentSessionId, isCreatingSession,
+    onCreateSession: handleCreateSession,
+    onSelectSession: handleSelectSession,
+    onDeleteSession: handleDeleteSession,
+    user, onLogout: handleLogout,
   };
 
   return (
-    <div className="flex h-screen">
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="absolute top-4 left-4 z-10 p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition"
-      >
-        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
-
+    <div className="flex h-screen" style={{ background: '#fbf6ee' }}>
       {sidebarOpen && (
-        <Sidebar
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          isCreatingSession={isCreatingSession}
-          onCreateSession={handleCreateSession}
-          onSelectSession={handleSelectSession}
-          onDeleteSession={handleDeleteSession}
-          user={user}
-          onLogout={handleLogout}
-        />
+        <div className="drawer-overlay active md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <main className="flex-1 flex flex-col">
-        <TherapyModeSelector selectedMode={therapyMode} onSelect={setTherapyMode} />
-        {showTriadForm && therapyMode === 'cbt' && (
-          <CognitiveTriadForm
-            onSubmit={(data) => {
-              handleSend(`[认知三角记录]\n想法：${data.thought}\n感受：${data.feeling}\n行为：${data.behavior}`);
-              setShowTriadForm(false);
-            }}
-            onClose={() => setShowTriadForm(false)}
-          />
-        )}
-        {showDesensitizePanel && therapyMode === 'desensitize' && (
-          <DesensitizePanel
-            onSubmit={(message) => {
-              handleSend(message);
-              setShowDesensitizePanel(false);
-            }}
-            onClose={() => setShowDesensitizePanel(false)}
-          />
-        )}
+      <div className="md:hidden" style={{ position: 'fixed', inset: '0', pointerEvents: sidebarOpen ? 'auto' : 'none', zIndex: 50 }}>
+        <div
+          style={{
+            position: 'absolute', inset: '0', left: 'auto', width: '280px',
+            background: '#f8f3ea', borderRight: '1px solid #ded2c3',
+            transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+            transition: 'transform 300ms cubic-bezier(0.23, 1, 0.32, 1)',
+          }}
+        >
+          <Sidebar {...sidebarProps} isMobileDrawer onClose={() => setSidebarOpen(false)} />
+        </div>
+      </div>
+
+      <Sidebar {...sidebarProps} />
+
+      <main className="flex-1 flex flex-col min-w-0" style={{ background: '#fbf6ee' }}>
+        <div className="md:hidden flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid #ded2c3' }}>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 transition"
+            style={{ background: 'transparent', border: 'none', color: '#4c4037' }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: '1.1rem', color: '#2f5b4f' }}>林序</span>
+          <span className="text-xs" style={{ color: '#7a6d63' }}>
+            {THERAPY_MODES.find(m => m.id === therapyMode)?.name}
+          </span>
+        </div>
+
+        <div className="hidden md:flex items-center gap-0 px-4 pt-3 pb-0" style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%' }}>
+          {THERAPY_MODES.map((mode) => {
+            const isActive = therapyMode === mode.id;
+            return (
+              <button
+                key={mode.id}
+                onClick={() => setTherapyMode(mode.id)}
+                className="relative px-4 py-2 text-sm transition"
+                style={{
+                  color: isActive ? '#2f5b4f' : '#7a6d63',
+                  fontWeight: isActive ? 500 : 400,
+                  background: 'transparent',
+                  border: 'none',
+                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = '#4c4037'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#7a6d63'; }}
+              >
+                {mode.name}
+                {isActive && (
+                  <div style={{ position: 'absolute', bottom: 0, left: '16px', right: '16px', height: '3px', background: '#2f5b4f', borderRadius: '2px 2px 0 0' }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         <MessageList messages={messages} loading={loading} />
-        {therapyMode === 'cbt' && (
-          <div className="px-4 py-1 flex justify-center">
-            <button
-              onClick={() => setShowTriadForm(!showTriadForm)}
-              className="text-xs text-primary-600 hover:text-primary-700 px-3 py-1 rounded-full border border-primary-200 hover:bg-primary-50 transition"
-            >
-              🧠 记录认知三角
-            </button>
-          </div>
-        )}
-        {therapyMode === 'desensitize' && (
-          <div className="px-4 py-1 flex justify-center">
-            <button
-              onClick={() => setShowDesensitizePanel(!showDesensitizePanel)}
-              className="text-xs text-primary-600 hover:text-primary-700 px-3 py-1 rounded-full border border-primary-200 hover:bg-primary-50 transition"
-            >
-              🌊 脱敏训练面板
-            </button>
-          </div>
-        )}
+
         <ChatInput onSend={handleSend} loading={loading} />
       </main>
     </div>

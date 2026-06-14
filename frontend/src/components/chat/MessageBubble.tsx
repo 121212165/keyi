@@ -1,8 +1,5 @@
 'use client';
 
-import dayjs from 'dayjs';
-import ANTsMarker from '../therapy/ANTsMarker';
-
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -15,27 +12,23 @@ interface MessageBubbleProps {
 }
 
 export default function MessageBubble({ message }: MessageBubbleProps) {
+  const isUser = message.role === 'user';
+  const time = new Date(message.timestamp);
+  const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+
   return (
-    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[70%] px-4 py-3 ${
-          message.role === 'user'
-            ? 'bg-primary-500 text-white rounded-2xl rounded-br-sm'
-            : 'bg-white text-gray-800 rounded-2xl rounded-bl-sm shadow-sm'
-        }`}
-        style={{ whiteSpace: 'pre-wrap' }}
+        className={`px-4 py-3 ${isUser ? 'chat-bubble-user' : 'chat-bubble-assistant'}`}
+        style={{
+          whiteSpace: 'pre-wrap',
+          maxWidth: isUser ? 'min(70%, 480px)' : '100%',
+          wordBreak: 'break-word',
+        }}
       >
         {message.content}
-        {message.role === 'user' && (
-          <ANTsMarker
-            messageContent={message.content}
-            onMark={(content, type) => {
-              console.log('ANT marked:', type, content.substring(0, 50));
-            }}
-          />
-        )}
-        <div className="text-xs opacity-70 mt-1 text-right">
-          {dayjs(message.timestamp).format('HH:mm')}
+        <div className="text-xs mt-1 text-right" style={{ opacity: 0.6 }}>
+          {timeStr}
         </div>
       </div>
     </div>
