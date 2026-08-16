@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 import { chatAPI } from '@/lib/api';
+import { getTherapyMode } from '@/lib/therapy-modes';
 import Sidebar from './sidebar/Sidebar';
 import MessageList from './chat/MessageList';
 import ChatInput from './chat/ChatInput';
 import TherapyModeSelector from './therapy/TherapyModeSelector';
 import CognitiveTriadForm from './therapy/CognitiveTriadForm';
 import DesensitizePanel from './therapy/DesensitizePanel';
+import SleepLogPanel from './therapy/SleepLogPanel';
 
 interface Message {
   id: string;
@@ -23,16 +25,19 @@ interface Session {
   started_at: string;
   updated_at?: string;
   message_count: number;
+  therapy_mode?: string;
 }
 
-const WELCOME_MESSAGE: Message = {
-  id: 'welcome',
-  role: 'assistant',
-  content: '你好，我是林序，一个温暖、专业、有同理心的AI心理医生。\n\n在这里，你可以畅所欲言，我会用心倾听、陪伴和支持你。\n\n今天有什么想聊的吗？',
-  timestamp: '2026-01-01T00:00:00.000Z',
-};
+function makeWelcome(mode: string): Message {
+  return {
+    id: 'welcome',
+    role: 'assistant',
+    content: getTherapyMode(mode).welcome,
+    timestamp: '2026-01-01T00:00:00.000Z',
+  };
+}
 
-export default function ChatInterface() {
+export default function ChatInterface({ initialMode = 'general' }: { initialMode?: string }) {
   const {
     user, token, logout,
     sessions, currentSessionId, messages,
@@ -43,9 +48,12 @@ export default function ChatInterface() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
-  const [therapyMode, setTherapyMode] = useState('general');
+  const [therapyMode, setTherapyMode] = useState(initialMode);
   const [showTriadForm, setShowTriadForm] = useState(false);
   const [showDesensitizePanel, setShowDesensitizePanel] = useState(false);
+  const [showSleepPanel, setShowSleepPanel] = useState(false);
+
+  const currentMode = getTherapyMode(therapyMode);
 
   useEffect(() => {
     if (token) loadSessions();
@@ -54,8 +62,9 @@ export default function ChatInterface() {
 
   useEffect(() => {
     if (messages.length === 0 && !currentSessionId) {
-      setMessages([WELCOME_MESSAGE]);
+      setMessages([makeWelcome(therapyMode)]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setMessages, messages.length, currentSessionId]);
 
   const loadSessions = async () => {
@@ -70,7 +79,7 @@ export default function ChatInterface() {
 
   const loadSessionHistory = async (sessionId: string) => {
     try {
-      const res = await chatAPI.getHistory(sessionId);
+      const res = await chatAPI.getHistory(sessionId, 50, token ?? undefined);
       const messagesData = res.data?.messages || res.data;
       if (Array.isArray(messagesData)) setMessages(messagesData);
     } catch (err) {
@@ -90,11 +99,12 @@ export default function ChatInterface() {
           started_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           message_count: 0,
+          therapy_mode: res.data.therapy_mode ?? therapyMode,
         };
         addSession(newSession);
         setCurrentSession(newSession.id);
         clearMessages();
-        setMessages([WELCOME_MESSAGE]);
+        setMessages([makeWelcome(therapyMode)]);
       }
     } catch (err) {
       console.error('创建会话失败:', err);
@@ -104,8 +114,25 @@ export default function ChatInterface() {
   };
 
   const handleSelectSession = (sessionId: string) => {
+    const selectedSession = sessions.find((session) => session.id === sessionId);
+    if (selectedSession?.therapy_mode) {
+      setTherapyMode(selectedSession.therapy_mode);
+    }
     setCurrentSession(sessionId);
     loadSessionHistory(sessionId);
+  };
+
+  const handleSelectMode = (mode: string) => {
+    if (mode === therapyMode) return;
+    setTherapyMode(mode);
+    // 模式切换 = 进入对应模式的会话；若当前会话不是该模式，则视为新会话
+    const cur = sessions.find((s) => s.id === currentSessionId);
+    if (cur && cur.therapy_mode !== mode) {
+      setCurrentSession(null);
+      setMessages([makeWelcome(mode)]);
+    } else if (!cur) {
+      setMessages([makeWelcome(mode)]);
+    }
   };
 
   const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
@@ -124,7 +151,10 @@ export default function ChatInterface() {
   };
 
   const handleSend = async (content: string) => {
-    if (!currentSessionId) {
+    // 串模式防护：无当前会话，或当前会话模式与所选模式不同 → 新建该模式会话
+    const state = useStore.getState();
+    const cur = state.sessions.find((s) => s.id === state.currentSessionId);
+    if (!cur || cur.therapy_mode !== therapyMode) {
       await handleCreateSession();
       await new Promise(r => setTimeout(r, 100));
     }
@@ -138,7 +168,7 @@ export default function ChatInterface() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-      const sid = currentSessionId || useStore.getState().currentSessionId;
+      const sid = useStore.getState().currentSessionId;
       if (!sid) throw new Error('No session');
 
       const response = await fetch(`${API_URL}/api/v1/chat/sessions/${sid}/messages/stream`, {
@@ -171,6 +201,9 @@ export default function ChatInterface() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
+              if (data.type === 'error') {
+                throw new Error(data.error || 'Stream failed');
+              }
               if (data.type === 'delta' && data.text) {
                 fullReply += data.text;
                 if (!rafId) rafId = requestAnimationFrame(flushUI);
@@ -193,7 +226,7 @@ export default function ChatInterface() {
     }
   };
 
-  const handleLogout = () => { logout(); window.location.reload(); };
+  const handleLogout = () => { logout(); window.location.href = '/'; };
 
   const sidebarProps = {
     sessions, currentSessionId, isCreatingSession,
@@ -240,13 +273,15 @@ export default function ChatInterface() {
               <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: '1.1rem', color: '#2f5b4f' }}>林序</span>
-          <TherapyModeSelector selectedMode={therapyMode} onSelect={setTherapyMode} />
+          <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: '1.1rem', color: '#2f5b4f' }}>
+            {currentMode.icon} {currentMode.name}
+          </span>
+          <TherapyModeSelector selectedMode={therapyMode} onSelect={handleSelectMode} />
         </div>
 
         {/* PC mode tabs */}
         <div className="hidden md:block">
-          <TherapyModeSelector selectedMode={therapyMode} onSelect={setTherapyMode} />
+          <TherapyModeSelector selectedMode={therapyMode} onSelect={handleSelectMode} />
         </div>
 
         {/* Therapy panels (collapsible) */}
@@ -269,21 +304,33 @@ export default function ChatInterface() {
             />
           </div>
         )}
+        {showSleepPanel && therapyMode === 'sleep' && (
+          <div style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%', padding: '0 16px' }}>
+            <SleepLogPanel
+              onSubmit={(message) => { handleSend(message); setShowSleepPanel(false); }}
+              onClose={() => setShowSleepPanel(false)}
+            />
+          </div>
+        )}
 
         {/* Messages */}
         <MessageList messages={messages} loading={loading} />
 
         {/* Therapy action buttons */}
-        {(therapyMode === 'cbt' || therapyMode === 'desensitize') && (
+        {(therapyMode === 'cbt' || therapyMode === 'desensitize' || therapyMode === 'sleep') && (
           <div style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%', padding: '4px 16px' }} className="flex justify-center">
             <button
-              onClick={() => therapyMode === 'cbt' ? setShowTriadForm(!showTriadForm) : setShowDesensitizePanel(!showDesensitizePanel)}
+              onClick={() => {
+                if (therapyMode === 'cbt') setShowTriadForm(!showTriadForm);
+                else if (therapyMode === 'desensitize') setShowDesensitizePanel(!showDesensitizePanel);
+                else setShowSleepPanel(!showSleepPanel);
+              }}
               className="text-xs px-3 py-1 transition"
-              style={{ color: '#2f5b4f', borderRadius: '9999px', border: '1px solid rgba(47,91,79,0.2)', background: 'transparent' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(47,91,79,0.06)'; }}
+              style={{ color: currentMode.color, borderRadius: '9999px', border: `1px solid ${currentMode.color}33`, background: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = `${currentMode.color}0f`; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              {therapyMode === 'cbt' ? '记录认知三角' : '脱敏训练面板'}
+              {therapyMode === 'cbt' ? '记录认知三角' : therapyMode === 'desensitize' ? '脱敏训练面板' : '填写睡眠日志'}
             </button>
           </div>
         )}

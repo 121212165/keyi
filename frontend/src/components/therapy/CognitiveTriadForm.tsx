@@ -113,7 +113,7 @@ export default function CognitiveTriadForm({ onSubmit, onClose }: CognitiveTriad
           onMouseEnter={(e) => { if (thought.trim()) e.currentTarget.style.background = "#274d43"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "#2f5b4f"; }}
         >
-          提交给林序分析
+          提交给可意分析
         </button>
       </div>
     </div>

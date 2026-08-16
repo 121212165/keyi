@@ -44,8 +44,10 @@ export const chatAPI = {
       { headers: token ? { Authorization: `Bearer ${token}` } : {} }
     ),
 
-  getHistory: (sessionId: string, limit = 50) =>
-    api.get(`/api/v1/chat/sessions/${sessionId}/history?limit=${limit}`),
+  getHistory: (sessionId: string, limit = 50, token?: string) =>
+    api.get(`/api/v1/chat/sessions/${sessionId}/history?limit=${limit}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
 
   deleteSession: (sessionId: string, token?: string) =>
     api.delete(`/api/v1/chat/sessions/${sessionId}`, {

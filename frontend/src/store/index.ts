@@ -15,6 +15,7 @@ interface Session {
   started_at: string;
   updated_at?: string;
   message_count: number;
+  therapy_mode?: string;
 }
 
 interface User {
@@ -49,7 +50,7 @@ interface AppState {
   setLoading: (loading: boolean) => void;
 
   // 持久化
-  _persist: any;
+  _persist: unknown;
 }
 
 // 创建 store（不使用持久化，在组件中手动处理）

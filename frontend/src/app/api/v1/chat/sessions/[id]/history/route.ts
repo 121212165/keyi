@@ -6,6 +6,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const limitParam = Number(req.nextUrl.searchParams.get('limit') ?? '50')
+    const limit = Number.isFinite(limitParam)
+      ? Math.min(Math.max(Math.trunc(limitParam), 1), 200)
+      : 50
+
     const authHeader = req.headers.get('authorization')
 
     if (!authHeader?.startsWith('Bearer ')) {
@@ -39,7 +44,7 @@ export async function GET(
       .select('id, role, content, created_at, emotion')
       .eq('session_id', id)
       .order('created_at', { ascending: true })
-      .limit(50)
+      .limit(limit)
 
     if (queryError) {
       console.error('查询消息历史失败:', queryError)

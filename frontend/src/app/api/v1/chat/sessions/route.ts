@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
-    const therapyMode = body.therapy_mode || 'default'
+    const therapyMode = body.therapy_mode || 'general'
 
     const sessionId = crypto.randomUUID()
     const now = new Date().toISOString()
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
 
     const { data: sessions, error: queryError } = await supabaseAdmin()
       .from('chat_sessions')
-      .select('id, title, started_at, updated_at, message_count')
+      .select('id, title, started_at, updated_at, message_count, therapy_mode')
       .eq('user_id', userData.user.id)
       .order('started_at', { ascending: false })
 
