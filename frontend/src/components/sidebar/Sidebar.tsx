@@ -10,6 +10,7 @@ interface Session {
   started_at: string;
   updated_at?: string;
   message_count: number;
+  therapy_mode?: string;
 }
 
 interface User {
@@ -47,7 +48,7 @@ export default function Sidebar({
       <div className="p-4 flex-shrink-0" style={{ borderBottom: '1px solid #ded2c3' }}>
         <div className="flex items-center justify-between">
           <div>
-            <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: '1.25rem', fontWeight: 400, color: '#2f5b4f' }}>林序</h1>
+            <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: '1.25rem', fontWeight: 400, color: '#2f5b4f' }}>可意</h1>
             <p className="text-sm" style={{ color: '#7a6d63' }}>森林里的倾听者</p>
           </div>
           {isMobileDrawer && onClose && (

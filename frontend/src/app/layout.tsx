@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "林序 · AI 心理陪伴",
-  description: "林序，温暖专业的AI心理健康助手",
+  title: "可意 · AI 心理医生",
+  description: "可意，温暖专业的AI心理健康助手：自由倾诉、CBT 认知疗法、系统脱敏、CBT-I 睡眠改善",
 };
 
 export default function RootLayout({

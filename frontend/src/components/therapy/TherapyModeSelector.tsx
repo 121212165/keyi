@@ -1,20 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-
-interface TherapyMode {
-  id: string;
-  name: string;
-  shortName: string;
-  description: string;
-  icon: string;
-}
-
-const THERAPY_MODES: TherapyMode[] = [
-  { id: 'general', name: '自由对话', shortName: '自由', description: '普通的支持性对话，我会倾听并陪伴你', icon: '💬' },
-  { id: 'cbt', name: 'CBT 认知疗法', shortName: 'CBT', description: '帮助识别和改变负性思维模式', icon: '🧠' },
-  { id: 'desensitize', name: '系统脱敏', shortName: '脱敏', description: '通过渐进式暴露克服恐惧和焦虑', icon: '🌊' },
-];
+import { THERAPY_MODES } from '@/lib/therapy-modes';
 
 interface TherapyModeSelectorProps {
   selectedMode: string;

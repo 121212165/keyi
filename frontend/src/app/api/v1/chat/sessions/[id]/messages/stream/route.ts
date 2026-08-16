@@ -1,6 +1,11 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
 import { buildSystemPrompt } from '@/lib/prompts'
+import {
+  detectCrisis,
+  extractAssistantArtifacts,
+  getVisibleReplyFromRaw,
+} from '@/lib/chat-runtime'
 
 export async function POST(
   req: Request,
@@ -18,16 +23,18 @@ export async function POST(
       })
     }
 
-    // 验证认证令牌
     const authHeader = req.headers.get('authorization')
+
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: '未提供认证令牌' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       })
     }
+
     const token = authHeader.slice(7)
     const { data: userData, error: authError } = await supabaseAdmin().auth.getUser(token)
+
     if (authError || !userData.user) {
       return new Response(JSON.stringify({ error: '认证失败，请重新登录' }), {
         status: 401,
@@ -35,11 +42,11 @@ export async function POST(
       })
     }
 
-    // 获取会话信息
     const { data: session, error: sessionError } = await supabaseAdmin()
       .from('chat_sessions')
       .select('*')
       .eq('id', sessionId)
+      .eq('user_id', userData.user.id)
       .single()
 
     if (sessionError || !session) {
@@ -49,7 +56,55 @@ export async function POST(
       })
     }
 
-    // 获取历史消息
+    const therapyMode = session.therapy_mode || 'general'
+    const userMessageId = crypto.randomUUID()
+    const assistantMessageId = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const crisisResult = detectCrisis(message)
+
+    if (crisisResult) {
+      const sessionMemory = {
+        ...(session.emotion_summary || {}),
+        therapy_mode: therapyMode,
+        last_crisis_level: crisisResult.level,
+        last_crisis_keyword: crisisResult.keyword,
+        updated_at: now,
+      }
+
+      await persistConversation({
+        sessionId,
+        session,
+        now,
+        userMessageId,
+        assistantMessageId,
+        userMessage: message,
+        assistantReply: crisisResult.response,
+        assistantMetadata: {
+          type: 'crisis_response',
+          alert_level: crisisResult.level,
+          detected_keyword: crisisResult.keyword,
+        },
+        sessionMemory,
+      })
+
+      await logCrisisEvent({
+        sessionId,
+        userId: userData.user.id,
+        userMessage: message,
+        responseGiven: crisisResult.response,
+        alertLevel: crisisResult.level,
+        detectedKeyword: crisisResult.keyword,
+      })
+
+      return createCrisisSseResponse({
+        userMessageId,
+        assistantMessageId,
+        responseText: crisisResult.response,
+        alertLevel: crisisResult.level,
+        detectedKeyword: crisisResult.keyword,
+      })
+    }
+
     const { data: history } = await supabaseAdmin()
       .from('messages')
       .select('role, content')
@@ -57,16 +112,12 @@ export async function POST(
       .order('created_at', { ascending: true })
       .limit(20)
 
-    // 构建消息数组
     const messages = [
       ...(history || []),
       { role: 'user', content: message },
     ]
 
-    // 构建系统提示词
-    const systemPrompt = buildSystemPrompt(session.therapy_mode || 'general')
-
-    // 调用 LLM API (streaming)
+    const systemPrompt = buildSystemPrompt(therapyMode)
     const llmBase = process.env.LLM_BASE_URL
     const llmKey = process.env.LLM_API_KEY
 
@@ -93,14 +144,11 @@ export async function POST(
       }),
     })
 
-    // Retry on transient failures
     if (!llmRes.ok) {
-      const errText = await llmRes.text().catch(() => '')
+      const errText = await llmRes.text()
       console.error('LLM 流式请求失败:', llmRes.status, errText)
 
-      // Retry once on 429/500/502/503
-      if ([429, 500, 502, 503].includes(llmRes.status)) {
-        await new Promise(r => setTimeout(r, 2000))
+      if (llmRes.status === 529 || llmRes.status === 503 || llmRes.status === 429) {
         const retryRes = await fetch(`${llmBase}/v1/messages`, {
           method: 'POST',
           headers: {
@@ -116,6 +164,7 @@ export async function POST(
             stream: true,
           }),
         })
+
         if (retryRes.ok && retryRes.body) {
           llmRes = retryRes
         } else {
@@ -139,21 +188,17 @@ export async function POST(
       })
     }
 
-    // 保存会话上下流
-    const userMessageId = crypto.randomUUID()
-    const assistantMessageId = crypto.randomUUID()
-    const now = new Date().toISOString()
-    let fullReply = ''
+    let rawReply = ''
+    let visibleReply = ''
 
-    // 创建 SSE 流
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
         const reader = llmRes.body!.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
+        let doneSent = false
 
-        // 发送消息 ID 事件
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'message_start', message_id: userMessageId, reply_id: assistantMessageId })}\n\n`)
         )
@@ -176,22 +221,27 @@ export async function POST(
               try {
                 const event = JSON.parse(jsonStr)
 
-                // Anthropic SSE: content_block_delta 事件包含文本增量
                 if (event.type === 'content_block_delta' && event.delta?.text) {
-                  fullReply += event.delta.text
-                  controller.enqueue(
-                    encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: event.delta.text })}\n\n`)
-                  )
+                  rawReply += event.delta.text
+                  const nextVisibleReply = getVisibleReplyFromRaw(rawReply)
+                  const nextDelta = nextVisibleReply.slice(visibleReply.length)
+
+                  if (nextDelta) {
+                    visibleReply = nextVisibleReply
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: nextDelta })}\n\n`)
+                    )
+                  }
                 }
 
-                // message_stop 表示流结束
-                if (event.type === 'message_stop') {
+                if (event.type === 'message_stop' && !doneSent) {
+                  doneSent = true
                   controller.enqueue(
                     encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
                   )
                 }
               } catch {
-                // 跳过格式错误的数据行
+                continue
               }
             }
           }
@@ -201,42 +251,32 @@ export async function POST(
             encoder.encode(`data: ${JSON.stringify({ type: 'error', error: '流读取中断' })}\n\n`)
           )
         } finally {
+          if (!doneSent) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
+            )
+          }
+
           controller.close()
 
-          // 流结束后保存消息到数据库
           try {
-            await supabaseAdmin().from('messages').insert({
-              id: userMessageId,
-              session_id: sessionId,
-              role: 'user',
-              content: message,
-              created_at: now,
+            const { cleanReply, metadata, sessionMemory } = extractAssistantArtifacts(
+              rawReply,
+              therapyMode,
+              session.emotion_summary,
+            )
+
+            await persistConversation({
+              sessionId,
+              session,
+              now,
+              userMessageId,
+              assistantMessageId,
+              userMessage: message,
+              assistantReply: cleanReply,
+              assistantMetadata: metadata,
+              sessionMemory,
             })
-
-            await supabaseAdmin().from('messages').insert({
-              id: assistantMessageId,
-              session_id: sessionId,
-              role: 'assistant',
-              content: fullReply,
-              created_at: now,
-            })
-
-            const newCount = (session.message_count || 0) + 2
-            const updateFields: Record<string, unknown> = {
-              message_count: newCount,
-              updated_at: now,
-            }
-
-            if (!session.title || session.title === '新对话') {
-              updateFields.title = message.length > 20
-                ? message.slice(0, 20) + '...'
-                : message
-            }
-
-            await supabaseAdmin()
-              .from('chat_sessions')
-              .update(updateFields)
-              .eq('id', sessionId)
           } catch (dbError) {
             console.error('保存流式消息失败:', dbError)
           }
@@ -258,4 +298,159 @@ export async function POST(
       headers: { 'Content-Type': 'application/json' },
     })
   }
+}
+
+function createCrisisSseResponse({
+  userMessageId,
+  assistantMessageId,
+  responseText,
+  alertLevel,
+  detectedKeyword,
+}: {
+  userMessageId: string
+  assistantMessageId: string
+  responseText: string
+  alertLevel: string
+  detectedKeyword: string
+}) {
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder()
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: 'message_start', message_id: userMessageId, reply_id: assistantMessageId })}\n\n`)
+      )
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: 'crisis', alert_level: alertLevel, detected_keyword: detectedKeyword })}\n\n`)
+      )
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: responseText })}\n\n`)
+      )
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: 'done', alert_level: alertLevel })}\n\n`)
+      )
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
+}
+
+async function persistConversation({
+  sessionId,
+  session,
+  now,
+  userMessageId,
+  assistantMessageId,
+  userMessage,
+  assistantReply,
+  assistantMetadata,
+  sessionMemory,
+}: {
+  sessionId: string
+  session: ChatSessionRecord
+  now: string
+  userMessageId: string
+  assistantMessageId: string
+  userMessage: string
+  assistantReply: string
+  assistantMetadata: Record<string, unknown>
+  sessionMemory: Record<string, unknown>
+}) {
+  const rows = [
+    {
+      id: userMessageId,
+      session_id: sessionId,
+      role: 'user',
+      content: userMessage,
+      created_at: now,
+    },
+    {
+      id: assistantMessageId,
+      session_id: sessionId,
+      role: 'assistant',
+      content: assistantReply,
+      created_at: now,
+      metadata: assistantMetadata,
+    },
+  ]
+
+  const insertResult = await supabaseAdmin().from('messages').insert(rows)
+
+  if (insertResult.error) {
+    const fallbackResult = await supabaseAdmin().from('messages').insert(
+      rows.map((row) => {
+        const fallbackRow = { ...row } as typeof row & { metadata?: Record<string, unknown> }
+        delete fallbackRow.metadata
+        return fallbackRow
+      }),
+    )
+
+    if (fallbackResult.error) {
+      throw fallbackResult.error
+    }
+  }
+
+  const updateFields: Record<string, unknown> = {
+    message_count: (session.message_count || 0) + 2,
+    updated_at: now,
+    emotion_summary: sessionMemory,
+  }
+
+  if (!session.title || session.title === '新对话') {
+    updateFields.title = userMessage.length > 20
+      ? `${userMessage.slice(0, 20)}...`
+      : userMessage
+  }
+
+  const { error: updateError } = await supabaseAdmin()
+    .from('chat_sessions')
+    .update(updateFields)
+    .eq('id', sessionId)
+
+  if (updateError) {
+    throw updateError
+  }
+}
+
+async function logCrisisEvent({
+  sessionId,
+  userId,
+  userMessage,
+  responseGiven,
+  alertLevel,
+  detectedKeyword,
+}: {
+  sessionId: string
+  userId: string
+  userMessage: string
+  responseGiven: string
+  alertLevel: string
+  detectedKeyword: string
+}) {
+  const { error } = await supabaseAdmin().from('crisis_events').insert({
+    id: crypto.randomUUID(),
+    session_id: sessionId,
+    user_id: userId,
+    alert_level: alertLevel,
+    detected_keyword: detectedKeyword,
+    user_message: userMessage,
+    response_given: responseGiven,
+    metadata: {},
+    created_at: new Date().toISOString(),
+  })
+
+  if (error) {
+    console.error('记录危机事件失败:', error)
+  }
+}
+
+interface ChatSessionRecord {
+  message_count?: number | null
+  title?: string | null
 }

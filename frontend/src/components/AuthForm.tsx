@@ -3,25 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 
-async function refreshTokenIfNeeded(token: string | null, refreshToken: string | null): Promise<string | null> {
-  if (!token || !refreshToken) return token;
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const expiresAt = payload.exp * 1000;
-    if (Date.now() < expiresAt - 60000) return token; // still valid (1min buffer)
-    const res = await fetch('/api/v1/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return data.access_token;
-    }
-  } catch {}
-  return token;
-}
-
 export default function AuthForm() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -80,9 +61,9 @@ export default function AuthForm() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "2.5rem", fontWeight: 400, color: "#2f5b4f", letterSpacing: "-0.02em" }} className="mb-2">
-            林序
+            可意
           </h1>
-          <p style={{ color: "#7a6d63" }}>在林间找到安宁</p>
+          <p style={{ color: "#7a6d63" }}>温暖、专业、有同理心的 AI 心理医生</p>
         </div>
 
         <div style={{ background: "#fffdf8", borderRadius: "16px", boxShadow: "0 20px 52px rgba(32,25,20,0.12)", padding: "2rem" }}>
@@ -173,13 +154,13 @@ export default function AuthForm() {
           <div className="mt-6 pt-6" style={{ borderTop: "1px solid #ded2c3" }}>
             <button
               type="button"
-              onClick={() => { setUser(null, ''); window.location.reload(); }}
+              onClick={() => { window.location.href = '/'; }}
               className="w-full py-2 text-sm transition"
               style={{ color: "#7a6d63" }}
               onMouseEnter={(e) => { e.currentTarget.style.color = "#4c4037"; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = "#7a6d63"; }}
             >
-              暂不登录，先试试
+              ← 返回，重新选择想做的事
             </button>
           </div>
         </div>

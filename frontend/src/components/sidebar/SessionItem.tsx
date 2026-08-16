@@ -13,6 +13,7 @@ interface Session {
   started_at: string;
   updated_at?: string;
   message_count: number;
+  therapy_mode?: string;
 }
 
 interface SessionItemProps {
