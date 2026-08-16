@@ -1,8 +1,6 @@
 'use client';
 
 import SessionItem from './SessionItem';
-import EmotionRecorder from '../therapy/EmotionRecorder';
-import { ANTsList } from '../therapy/ANTsMarker';
 
 interface Session {
   id: string;
@@ -90,9 +88,6 @@ export default function Sidebar({
         )}
       </div>
 
-      <EmotionRecorder />
-      <ANTsList />
-
       <div className="p-4 flex-shrink-0" style={{ borderTop: '1px solid #ded2c3' }}>
         {user ? (
           <div className="flex items-center justify-between">
@@ -114,7 +109,6 @@ export default function Sidebar({
     </>
   );
 
-  // Mobile drawer
   if (isMobileDrawer) {
     return (
       <aside
@@ -131,7 +125,6 @@ export default function Sidebar({
     );
   }
 
-  // PC sidebar
   return (
     <aside className="hidden md:flex w-60 flex-col flex-shrink-0" style={{ background: '#f8f3ea', borderRight: '1px solid #ded2c3' }}>
       {sidebarContent}

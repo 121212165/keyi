@@ -10,8 +10,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
-    "axios": "^1.13.5",
-    "dayjs": "^1.11.19",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
