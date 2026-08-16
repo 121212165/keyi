@@ -1,74 +1,87 @@
-import axios from 'axios';
-
+/**
+ * API 客户端 —— 原生 fetch 实现（无 axios 依赖）
+ * 导出签名与历史 axios 版兼容：返回 { data }，错误带 .response.status
+ */
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
-const api = axios.create({
-  baseURL: API_BASE,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  token?: string;
+}
+
+async function request<T = any>(path: string, options: RequestOptions = {}): Promise<{ data: T }> {
+  const { method = 'GET', body, token } = options;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const message =
+      (data.error as string) || (data.detail as string) || `请求失败 (HTTP ${res.status})`;
+    const err = new Error(message) as Error & { response?: { status: number } };
+    err.response = { status: res.status };
+    throw err;
+  }
+
+  return { data: data as T };
+}
 
 export const authAPI = {
   register: (email: string, password: string) =>
-    api.post('/api/v1/auth/register', { email, password }),
+    request('/api/v1/auth/register', { method: 'POST', body: { email, password } }),
 
   login: (email: string, password: string) =>
-    api.post('/api/v1/auth/login', { email, password }),
+    request('/api/v1/auth/login', { method: 'POST', body: { email, password } }),
 
-  logout: () => api.post('/api/v1/auth/logout'),
+  logout: () => request('/api/v1/auth/logout', { method: 'POST' }),
 
   me: (token: string) =>
-    api.get('/api/v1/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    request('/api/v1/auth/me', { token }),
 };
 
 export const chatAPI = {
   createSession: (token?: string, therapyMode?: string) =>
-    api.post(
-      '/api/v1/chat/sessions',
-      { therapy_mode: therapyMode },
-      { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-    ),
+    request('/api/v1/chat/sessions', {
+      method: 'POST',
+      body: { therapy_mode: therapyMode },
+      token,
+    }),
 
   listSessions: (token?: string) =>
-    api.get('/api/v1/chat/sessions', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }),
+    request('/api/v1/chat/sessions', { token }),
 
   sendMessage: (sessionId: string, message: string, token?: string) =>
-    api.post(
-      `/api/v1/chat/sessions/${sessionId}/messages`,
-      { message },
-      { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-    ),
+    request(`/api/v1/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: { message },
+      token,
+    }),
 
   getHistory: (sessionId: string, limit = 50, token?: string) =>
-    api.get(`/api/v1/chat/sessions/${sessionId}/history?limit=${limit}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }),
+    request(`/api/v1/chat/sessions/${sessionId}/history?limit=${limit}`, { token }),
 
   deleteSession: (sessionId: string, token?: string) =>
-    api.delete(`/api/v1/chat/sessions/${sessionId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }),
+    request(`/api/v1/chat/sessions/${sessionId}`, { method: 'DELETE', token }),
 
   chat: (message: string, token?: string) =>
-    api.post(
-      '/api/v1/ai/chat',
-      { message },
-      { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-    ),
+    request('/api/v1/ai/chat', { method: 'POST', body: { message }, token }),
 
   sendMessageStream: async function* (
     sessionId: string,
     message: string,
     token?: string
   ) {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
     const response = await fetch(
-      `${API_URL}/api/v1/chat/sessions/${sessionId}/messages/stream`,
+      `${API_BASE}/api/v1/chat/sessions/${sessionId}/messages/stream`,
       {
         method: 'POST',
         headers: {
@@ -109,4 +122,4 @@ export const chatAPI = {
   },
 };
 
-export default api;
+export default { request };
