@@ -3,6 +3,27 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 
+interface AuthResponse {
+  access_token?: string;
+  refresh_token?: string;
+  user?: { id: string; email: string };
+}
+
+function unwrapAuthResponse(payload: unknown): AuthResponse {
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    const envelope = payload as { data?: AuthResponse; success?: boolean; error?: unknown };
+    if ('success' in envelope || 'error' in envelope) return envelope.data || {};
+  }
+  return (payload || {}) as AuthResponse;
+}
+
+function authErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '请求失败';
+  const data = payload as { error?: string | { message?: string }; detail?: string; message?: string };
+  if (typeof data.error === 'string') return data.error;
+  return data.error?.message || data.detail || data.message || '请求失败';
+}
+
 export default function AuthForm() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -37,16 +58,23 @@ export default function AuthForm() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      const payload = await response.json();
 
       if (!response.ok) {
-        const msg = data.error || data.detail || '请求失败';
+        const msg = authErrorMessage(payload);
         if (msg.includes('Email not confirmed') || msg.includes('验证')) {
           throw new Error('请先验证邮箱后再登录。查收您的邮件，点击验证链接后刷新页面再试。');
         }
         throw new Error(msg);
       }
 
+      const data = unwrapAuthResponse(payload);
+      if (!data.access_token && !isLogin) {
+        setSuccess('注册成功。请查收验证邮件，验证后再登录。');
+        setIsLogin(true);
+        return;
+      }
+      if (!data.access_token) throw new Error('登录响应缺少访问令牌');
       setUser(data.user || { id: '', email }, data.access_token, data.refresh_token);
       window.location.reload();
     } catch (err: unknown) {
