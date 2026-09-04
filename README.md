@@ -1,86 +1,98 @@
-# 可意AI心理医生 | Keyi AI Psychologist
+# 可意 AI 心理支持 | Keyi
 
-免费的AI心理医生应用，提供CBT认知行为疗法、系统脱敏训练和情绪疏导三种专业心理治疗模式。24小时在线，无需预约，支持中文。
+可意是一个以 **CBT（认知行为疗法）为主线**、按需加入 **阶段化暴露训练** 的中文 AI 心理支持应用。系统提供持续对话、治疗计划、跨会话记忆和用户可撤回的数据控制能力。
 
-## 功能特性
+> 可意是心理健康辅助工具，不提供诊断，也不能替代心理咨询师、临床心理师或精神科医生。处于即时危险时，请优先联系当地急救、危机干预热线或可信赖的人。
 
-| 功能 | 说明 |
-|------|------|
-| 💬 自由对话 | 像和朋友聊天一样倾诉困扰，获得温暖的回应和支持 |
-| 🧠 CBT认知疗法 | 认知三角记录（想法-感受-行为）、自动化思维标记（ANTs） |
-| 🌊 系统脱敏 | 通过渐进式暴露，逐步克服恐惧和焦虑 |
-| 📝 情绪记录 | 记录和追踪情绪变化，了解自己的情绪模式 |
-| 🔒 会话管理 | 多会话支持，历史记录回顾 |
+## 产品模型
 
-## 什么是CBT认知行为疗法？
+- **CBT 主线**：默认使用 CBT 框架整理情境、自动化想法、情绪、行为和可执行练习。
+- **暴露训练插件**：只有在用户知情并主动选择后，才在 CBT 主线中进入准备、层级建立、练习和复盘阶段；它不是第二套平行治疗计划。
+- **三层上下文**：当前会话消息、会话摘要、经筛选的长期记忆按固定顺序参与后续对话。
+- **用户可控记忆**：用户可以查看系统保留的长期记忆并撤回；撤回后不再注入后续提示词。
+- **安全边界**：危机识别和求助资源优先于一般对话生成。
 
-CBT（Cognitive Behavioral Therapy）是目前循证级别最高的心理治疗方法之一。Meta分析显示，CBT对焦虑障碍的效应量达0.73（中等偏大），对抑郁症的效应量为0.66。
+## 架构
 
-可意AI将CBT的核心技术集成到AI对话中：
-- **认知三角记录**：记录引发情绪的事件、你的想法和感受
-- **自动化思维标记（ANTs）**：识别灾难化、非黑即白、读心术等思维陷阱
-- **苏格拉底式提问**：通过提问挑战不合理信念
+项目采用 **Supabase-first 单栈架构**：
 
-## 技术栈
+```text
+Browser
+  └─ Next.js UI
+       └─ Next.js Route Handlers (/api/v1/*)
+            ├─ Supabase Auth
+            ├─ Supabase Postgres + RLS
+            └─ OpenAI-compatible LLM endpoint
+```
 
-- **前端**：Next.js 16 + TypeScript + Tailwind CSS
-- **后端**：FastAPI + Python 3.11+
-- **数据库**：Supabase (PostgreSQL)
-- **AI模型**：智谱AI GLM-4.7-Flash
-- **部署**：Vercel (前端) + Railway (后端)
+- `frontend/`：Next.js 16 应用、UI 和唯一正式 API 层。
+- `supabase/`：数据库迁移、RLS、索引和本地 Supabase 配置。
+- `docs/`：架构、API、部署和数据治理说明。
+- `backend/`：历史 FastAPI 实现（legacy）；不是默认运行路径，也不应承接新功能。若旧分支仍包含该目录，仅用于迁移对照。
 
-## 快速开始
+## 本地开发
+
+### 前置条件
+
+- Node.js 20+
+- npm 10+
+- 一个 Supabase 项目；需要本地数据库时安装 Supabase CLI
+- 一个兼容 OpenAI Chat Completions/SSE 的模型服务
+
+### 环境变量
+
+在 `frontend/.env.local` 中配置：
 
 ```bash
-# 后端
-cd backend
-python -m venv venv
-pip install -r requirements.txt
-python run.py
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_KEY=<anon-key>
+SUPABASE_SERVICE_KEY=<service-role-key>
 
-# 前端
+LLM_BASE_URL=https://<provider>/v1
+LLM_API_KEY=<server-only-api-key>
+LLM_MODEL=<model-name>
+
+# 可选。默认使用同源 /api；仅在反向代理或兼容部署时设置。
+NEXT_PUBLIC_API_URL=
+```
+
+- `SUPABASE_SERVICE_KEY`、`LLM_API_KEY` 只能存在于服务端环境变量。
+- 不要使用 `NEXT_PUBLIC_*` 暴露任何密钥。
+- 浏览器通过 Bearer access token 调用同源 Route Handler；服务端再次向 Supabase 验证身份。
+
+### 运行与检查
+
+```bash
 cd frontend
 npm install
 npm run dev
+
+npm run lint
+npm run build
 ```
 
-## 项目结构
+数据库迁移和生产部署见 `docs/DEPLOYMENT.md`。
 
-```
-keyi/
-├── backend/              # FastAPI 后端
-│   ├── app/
-│   │   ├── routers/     # API 路由 (auth, chat, therapy)
-│   │   ├── services/    # 业务逻辑
-│   │   ├── prompts/     # AI 提示词 (CBT, 系统脱敏)
-│   │   └── models.py    # 数据模型
-│   └── tests/           # 测试
-├── frontend/            # Next.js 前端
-│   └── src/
-│       ├── app/         # 页面路由
-│       ├── components/  # React 组件
-│       └── store/       # 状态管理
-└── supabase/            # 数据库配置
-```
+## API 约定
 
-## 使用场景
+正式接口位于 `/api/v1`。新接口统一使用 `{ success, data, error }` JSON 包络。迁移期间前端同时接受历史裸数组/裸对象返回，API 不应长期依赖该兼容行为。详细契约见 `docs/API-CONTRACT.md`。
 
-- **日常情绪管理**：工作压力、人际关系困扰时需要一个倾听者
-- **焦虑自助**：社交焦虑、考试焦虑、特定恐惧的自助练习
-- **思维模式探索**：识别负性自动化思维，改善思维习惯
-- **心理咨询前准备**：在见咨询师之前整理自己的想法和感受
+## 数据与隐私
 
-## 重要提示
+- 所有用户数据表启用 RLS，并以 `auth.uid()` 隔离。
+- 长期记忆只保存与连续支持相关、相对稳定且达到置信阈值的信息。
+- 临时情绪、模型推测和高敏感细节不得自动升级为长期记忆。
+- 记忆撤回采用可审计的软删除状态；被撤回数据不再进入模型上下文。
+- Service Role 仅用于受控的服务器端 Route Handler，不能绕过应用层归属校验。
 
-可意AI是心理健康辅助工具，不能替代专业心理咨询师或精神科医生的诊断和治疗。如果你正在经历严重的心理困扰，请联系：
+完整规则见 `docs/DATA-GOVERNANCE.md`。
 
-- 全国24小时心理援助热线：**400-161-9995**
-- 北京心理危机研究与干预中心：**010-82951332**
+## 部署
+
+推荐使用 Vercel 部署 `frontend/` 与 Next.js Route Handlers，Supabase 承担 Auth、Postgres、RLS 和迁移，模型由 Route Handler 在服务端调用。不再需要 Railway/FastAPI 才能运行主应用。
+
+部署步骤、回滚和验收清单见 `docs/DEPLOYMENT.md`。
 
 ## 许可证
 
 MIT License
-
----
-
-*温暖、专业、有同理心的AI心理健康助手*

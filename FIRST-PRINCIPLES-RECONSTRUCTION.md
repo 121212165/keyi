@@ -1,44 +1,67 @@
-# First-Principles Reconstruction: keyi
+# 可意 Supabase-first 第一性原理重构
 
-> Applied Elon Musk's first-principles thinking: break to fundamental truths, rebuild from zero.
+## 1. 根本问题
 
-## Core Problem
+处于压力、焦虑或低落中的用户，需要一个随时可用、连续、安全且可控的空间来梳理问题。系统价值不来自“后端数量”或“功能菜单数量”，而来自四个结果：
 
-A person in emotional distress needs a safe, immediate, private space to talk and feel heard.
+1. 用户能快速开始并稳定完成一次对话。
+2. 对话遵循清晰、不过度承诺的 CBT 支持框架。
+3. 暴露训练有阶段、有同意、有退出路径，不被当作普通聊天技巧随意触发。
+4. 跨会话连续性可解释、可查看、可撤回。
 
-## First Principles Breakdown
+## 2. 不可约简的产品能力
 
-1. The prompt IS the product — empathy/safety from system prompt quality, not infrastructure
-2. Therapy modes are prompt variations, not software modules
-3. Authentication adds friction to crisis moments
-4. Two backends is one too many (FastAPI + Next.js)
-5. The conversation is the data model: messages, timestamps, user ID
+| 层级 | 能力 | 验收标准 |
+| --- | --- | --- |
+| P0 | 登录与数据隔离 | 用户只能访问自己的会话、计划、摘要和记忆 |
+| P0 | 流式心理支持对话 | 可中断、错误可恢复、危机内容优先进入安全路径 |
+| P0 | CBT 主线 | 新用户有唯一 active 主线计划，阶段可恢复 |
+| P1 | 阶段化暴露 | 作为 CBT 计划中的插件阶段进入、推进和结束 |
+| P1 | 连续记忆 | 当前消息、摘要、长期记忆分层组装，不混写 |
+| P1 | 用户控制 | 可查看和撤回长期记忆，撤回立即停止注入 |
 
-## Essential Features
+## 3. 架构结论
 
-| P0 | One text box with streaming AI response |
-| P0 | Carefully crafted system prompt |
-| P0 | Crisis keyword detection with safety resources |
-| P1 | Conversation persistence |
-| P1 | Multiple therapy modes (prompt switching) |
-| P2 | Mood tracking across sessions |
+### 单一正式应用后端
 
-## Current Complexity Audit
+Next.js Route Handlers 是唯一正式应用 API。Supabase 提供认证、Postgres 和 RLS；模型供应商只由服务端调用。
 
-- Dual backends (FastAPI + Next.js) — pick one
-- 251-line therapy service abstraction over a 10-line prompt switch
-- 3 duplicate prompt definitions
-- Dead SQLAlchemy models
-- Non-functional Supabase Edge Function
-- 4 conflicting database schemas
-- 1,075-line fantasy reference doc in source
-- 623 lines of localStorage-only UI with no backend integration
-- 8+ dead code files
+FastAPI `backend/` 属于 legacy：不再新增路由、数据模型或部署依赖，不作为 README、CI、Vercel 或生产排障的默认路径；在迁移观察期仅用于行为对照。
 
-## Reconstruction Blueprint
+### 主线加插件，而不是模式并列
 
-3 core files. Single-stack Next.js. ~800-1,000 lines (down from 3,000+).
+- CBT 是持续主线，负责目标、阶段、练习和复盘。
+- 自由倾诉是交互语气，不创建第二套治疗状态。
+- 暴露训练是计划中的阶段插件，需要明确意愿、可承受的练习层级和随时暂停能力。
+- 数据库中只允许一个用户有一个 active `mainline` 计划。
 
-## Musk's Razor
+### 记忆不是聊天记录的复制品
 
-10 cuts totaling 5,500+ lines. Irreducible: one chat interface, one API endpoint, one database table, one great prompt.
+上下文按以下顺序组装：
+
+1. **工作记忆**：当前会话最近消息，不单独进入长期记忆表。
+2. **会话摘要**：一次会话的目标、关键主题、练习和待跟进事项。
+3. **长期记忆**：稳定偏好、明确事实和持续治疗里程碑；必须有来源、置信度、状态与撤回能力。
+
+模型生成的推测不能被当作用户事实。暴露层级、作业和里程碑属于治疗流程状态，不应混入一般人格画像。
+
+## 4. 数据边界
+
+- 浏览器持有 Supabase access token，不持有 Service Role 或 LLM key。
+- Route Handler 验证 token 后仍按 `user_id` 查询，不能只依赖管理员客户端。
+- 数据库 RLS 是最后一道隔离边界，不允许 `USING (true)` 的全开放用户数据策略。
+- 删除会话与撤回记忆是不同语义：前者处理原始对话，后者停止长期记忆使用并保留最小审计信息。
+- 摘要或记忆提取失败不能阻断已完成的聊天响应，也不能产生半写入的 active 记忆。
+
+## 5. 统一契约
+
+非流式 JSON API 使用 `{ success, data, error }`。SSE 继续使用事件流，但错误事件也提供稳定的 `code` 与 `message`。前端在迁移期兼容历史裸数据，兼容层应最终删除。
+
+## 6. 卓越完成标准
+
+- 两个用户的隔离测试覆盖所有用户数据表。
+- 新用户、恢复会话、切换会话都指向同一 active CBT 计划。
+- 暴露训练能进入、推进、暂停、完成，并保留阶段历史。
+- 撤回记忆后，读取接口默认不返回 active 项，后续 prompt 不再包含该内容。
+- README、部署配置、环境变量和实际代码一致，不再要求启动 legacy backend。
+- `npm run lint` 与 `npm run build` 通过。

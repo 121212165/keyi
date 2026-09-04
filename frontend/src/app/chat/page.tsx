@@ -14,7 +14,7 @@ export default function ChatPage() {
     if (!token && !user) {
       const saved = restoreUser();
       if (saved && saved.user && saved.token) {
-        setUser(saved.user, saved.token);
+        setUser(saved.user, saved.token, saved.refreshToken || undefined);
       }
     }
   }, [setUser, token, user]);

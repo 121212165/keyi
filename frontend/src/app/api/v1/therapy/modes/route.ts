@@ -1,11 +1,10 @@
-import { NextResponse } from 'next/server'
+import { ok } from '@/lib/api'
 
 export async function GET() {
-  return NextResponse.json({
-    modes: [
-      { id: 'general', name: '自由对话', description: '普通的支持性对话' },
-      { id: 'cbt', name: 'CBT认知疗法', description: '认知行为疗法，帮助识别和改变负性思维模式' },
-      { id: 'desensitize', name: '系统脱敏', description: '通过渐进式暴露克服特定恐惧或焦虑' },
-    ],
-  })
+  const modes = [
+    { id: 'general', name: '支持性 CBT', description: '兼容入口；实际使用 CBT 主线', primary_method: 'cbt' },
+    { id: 'cbt', name: 'CBT 主线', description: '识别想法、情绪、行为并练习可执行改变', primary_method: 'cbt' },
+    { id: 'desensitize', name: '阶段化暴露训练', description: 'CBT 主线中的可暂停暴露插件', primary_method: 'cbt', plugin: 'exposure' },
+  ]
+  return ok(modes, { modes })
 }

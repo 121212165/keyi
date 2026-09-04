@@ -21,6 +21,23 @@ interface Session {
   message_count: number;
 }
 
+interface ApiErrorPayload {
+  code?: string;
+  message?: string;
+}
+
+interface ApiEnvelope<T> {
+  success?: boolean;
+  data?: T;
+  error?: string | ApiErrorPayload | null;
+  message?: string;
+}
+
+interface Feedback {
+  tone: 'success' | 'error';
+  text: string;
+}
+
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
@@ -34,8 +51,53 @@ const THERAPY_MODES = [
   { id: 'desensitize', name: '系统脱敏' },
 ];
 
-function authHeaders(token?: string | null): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}` } : {};
+let refreshRequest: Promise<string | null> | null = null;
+
+function unwrapData<T>(payload: unknown): T {
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    const envelope = payload as ApiEnvelope<T>;
+    if ('success' in envelope || 'error' in envelope) return envelope.data as T;
+  }
+  return payload as T;
+}
+
+function apiErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== 'object') return fallback;
+  const envelope = payload as ApiEnvelope<unknown> & { detail?: string };
+  if (typeof envelope.error === 'string') return envelope.error;
+  if (envelope.error?.message) return envelope.error.message;
+  return envelope.message || envelope.detail || fallback;
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  return response.json().catch(() => null);
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshRequest) return refreshRequest;
+
+  refreshRequest = (async () => {
+    const state = useStore.getState();
+    if (!state.user || !state.refreshToken) return null;
+
+    const response = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: state.refreshToken }),
+    });
+    const payload = await readJson(response);
+    if (!response.ok) return null;
+
+    const data = unwrapData<{ access_token?: string; refresh_token?: string }>(payload);
+    if (!data?.access_token) return null;
+
+    state.setUser(state.user, data.access_token, data.refresh_token || state.refreshToken);
+    return data.access_token;
+  })().catch(() => null).finally(() => {
+    refreshRequest = null;
+  });
+
+  return refreshRequest;
 }
 
 export default function ChatInterface() {
@@ -50,11 +112,38 @@ export default function ChatInterface() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [therapyMode, setTherapyMode] = useState('general');
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   useEffect(() => {
     if (token) loadSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  const handleAuthError = () => {
+    logout();
+    window.location.reload();
+  };
+
+  const requestWithAuth = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const send = (accessToken: string | null) => {
+      const headers = new Headers(init.headers);
+      if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+      return fetch(input, { ...init, headers });
+    };
+
+    let response = await send(useStore.getState().token);
+    if (response.status !== 401) return response;
+
+    const nextToken = await refreshAccessToken();
+    if (!nextToken) {
+      handleAuthError();
+      return response;
+    }
+
+    response = await send(nextToken);
+    if (response.status === 401) handleAuthError();
+    return response;
+  };
 
   useEffect(() => {
     if (messages.length === 0 && !currentSessionId) {
@@ -63,24 +152,31 @@ export default function ChatInterface() {
   }, [setMessages, messages.length, currentSessionId]);
 
   const loadSessions = async () => {
+    if (!token) return;
     try {
-      const res = await fetch('/api/v1/chat/sessions', { headers: authHeaders(token) });
-      const data = await res.json();
-      const sessionsData = data?.sessions || data;
+      const res = await requestWithAuth('/api/v1/chat/sessions');
+      const payload = await readJson(res);
+      if (!res.ok) throw new Error(apiErrorMessage(payload, '加载会话列表失败'));
+      const data = unwrapData<Session[] | { sessions?: Session[] }>(payload);
+      const sessionsData = Array.isArray(data) ? data : data?.sessions;
       if (Array.isArray(sessionsData)) setSessions(sessionsData);
     } catch (err) {
       console.error('加载会话列表失败:', err);
+      setFeedback({ tone: 'error', text: err instanceof Error ? err.message : '加载会话列表失败' });
     }
   };
 
   const loadSessionHistory = async (sessionId: string) => {
     try {
-      const res = await fetch(`/api/v1/chat/sessions/${sessionId}/history`);
-      const data = await res.json();
-      const messagesData = data?.messages || data;
+      const res = await requestWithAuth(`/api/v1/chat/sessions/${sessionId}/history`);
+      const payload = await readJson(res);
+      if (!res.ok) throw new Error(apiErrorMessage(payload, '加载历史消息失败'));
+      const data = unwrapData<Message[] | { messages?: Message[] }>(payload);
+      const messagesData = Array.isArray(data) ? data : data?.messages;
       if (Array.isArray(messagesData)) setMessages(messagesData);
     } catch (err) {
       console.error('加载历史消息失败:', err);
+      setFeedback({ tone: 'error', text: err instanceof Error ? err.message : '加载历史消息失败' });
     }
   };
 
@@ -88,15 +184,18 @@ export default function ChatInterface() {
     if (isCreatingSession) return;
     setIsCreatingSession(true);
     try {
-      const res = await fetch('/api/v1/chat/sessions', {
+      const res = await requestWithAuth('/api/v1/chat/sessions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ therapy_mode: therapyMode }),
       });
-      const data = await res.json();
-      if (data && data.id) {
+      const payload = await readJson(res);
+      if (!res.ok) throw new Error(apiErrorMessage(payload, '创建会话失败'));
+      const data = unwrapData<{ id?: string; session?: { id?: string } }>(payload);
+      const sessionId = data?.session?.id || data?.id;
+      if (sessionId) {
         const newSession: Session = {
-          id: data.id,
+          id: sessionId,
           title: '新对话',
           started_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -109,6 +208,7 @@ export default function ChatInterface() {
       }
     } catch (err) {
       console.error('创建会话失败:', err);
+      setFeedback({ tone: 'error', text: err instanceof Error ? err.message : '创建会话失败' });
     } finally {
       setIsCreatingSession(false);
     }
@@ -123,17 +223,20 @@ export default function ChatInterface() {
     e.stopPropagation();
     if (!confirm('确定要删除这个对话吗？')) return;
     try {
-      await fetch(`/api/v1/chat/sessions/${sessionId}`, {
+      const response = await requestWithAuth(`/api/v1/chat/sessions/${sessionId}`, {
         method: 'DELETE',
-        headers: authHeaders(token),
       });
+      const payload = await readJson(response);
+      if (!response.ok) throw new Error(apiErrorMessage(payload, '删除会话失败'));
       removeSession(sessionId);
       if (currentSessionId === sessionId) {
         clearMessages();
         setCurrentSession(null);
       }
+      setFeedback({ tone: 'success', text: '对话已删除' });
     } catch (err) {
       console.error('删除会话失败:', err);
+      setFeedback({ tone: 'error', text: err instanceof Error ? err.message : '删除会话失败，请稍后再试' });
     }
   };
 
@@ -154,15 +257,35 @@ export default function ChatInterface() {
       const sid = currentSessionId || useStore.getState().currentSessionId;
       if (!sid) throw new Error('No session');
 
-      const response = await fetch(`/api/v1/chat/sessions/${sid}/messages/stream`, {
+      const response = await requestWithAuth(`/api/v1/chat/sessions/${sid}/messages/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: content }),
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const payload = await readJson(response);
+        if (!response.ok) throw new Error(apiErrorMessage(payload, '消息发送失败'));
+        const data = unwrapData<{ type?: string; message?: string; response?: string }>(payload);
+        if (data?.type === 'crisis') {
+          const crisisMessage = data.message || data.response || '请优先联系当地急救、危机干预热线或身边可信赖的人。';
+          const currentMessages = useStore.getState().messages;
+          setMessages(currentMessages.map(message => (
+            message.id === assistantMsgId ? { ...message, content: crisisMessage } : message
+          )));
+          return;
+        }
+        throw new Error(apiErrorMessage(payload, '未收到有效回复'));
+      }
 
-      const reader = response.body!.getReader();
+      if (!response.ok) {
+        const payload = await readJson(response);
+        throw new Error(apiErrorMessage(payload, `消息发送失败（${response.status}）`));
+      }
+      if (!response.body) throw new Error('流式连接不可用');
+
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let fullReply = '';
@@ -183,9 +306,21 @@ export default function ChatInterface() {
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6));
-              if (data.type === 'delta' && data.text) {
+              const payload = JSON.parse(line.slice(6));
+              const data = unwrapData<{ type?: string; text?: string; message?: string; response?: string; error?: string }>(payload);
+              if (data?.type === 'delta' && data.text) {
                 fullReply += data.text;
+                if (!rafId) rafId = requestAnimationFrame(flushUI);
+              }
+              if (data?.type === 'crisis') {
+                const crisisMessage = data.message || data.response;
+                if (crisisMessage) {
+                  fullReply = crisisMessage;
+                  if (!rafId) rafId = requestAnimationFrame(flushUI);
+                }
+              }
+              if (data?.type === 'error') {
+                fullReply = data.message || data.error || '流式回复中断，请稍后再试。';
                 if (!rafId) rafId = requestAnimationFrame(flushUI);
               }
             } catch { /* skip */ }
@@ -196,11 +331,14 @@ export default function ChatInterface() {
       if (rafId) cancelAnimationFrame(rafId);
       flushUI();
       loadSessions();
-    } catch {
+    } catch (err) {
       const msgs = useStore.getState().messages.map(m =>
-        m.id === assistantMsgId ? { ...m, content: '抱歉，我遇到了一些问题。请稍后再试。' } : m
+        m.id === assistantMsgId
+          ? { ...m, content: err instanceof Error ? err.message : '抱歉，我遇到了一些问题。请稍后再试。' }
+          : m
       );
       setMessages(msgs);
+      setFeedback({ tone: 'error', text: err instanceof Error ? err.message : '消息发送失败' });
     } finally {
       setLoading(false);
     }
@@ -280,6 +418,18 @@ export default function ChatInterface() {
           })}
         </div>
 
+        {feedback && (
+          <div
+            role="status"
+            className="mx-4 mt-3 rounded-lg px-3 py-2 text-sm"
+            style={{
+              background: feedback.tone === 'error' ? '#fdf0ef' : '#f0f7f0',
+              color: feedback.tone === 'error' ? '#b33a3a' : '#4f8a4f',
+            }}
+          >
+            {feedback.text}
+          </div>
+        )}
         <MessageList messages={messages} loading={loading} />
 
         <ChatInput onSend={handleSend} loading={loading} />

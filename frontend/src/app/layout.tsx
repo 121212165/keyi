@@ -83,7 +83,7 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <script
           type="application/ld+json"
