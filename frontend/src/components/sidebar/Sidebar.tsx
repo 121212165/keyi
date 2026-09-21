@@ -47,13 +47,13 @@ export default function Sidebar({
         <div className="flex items-center justify-between">
           <div>
             <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: '1.25rem', fontWeight: 400, color: '#2f5b4f' }}>可意</h1>
-            <p className="text-sm" style={{ color: '#7a6d63' }}>森林里的倾听者</p>
+            <p className="text-sm" style={{ color: '#7a6d63' }}>陪你完成你现在想做的事</p>
           </div>
           {isMobileDrawer && onClose && (
-            <button onClick={onClose} className="p-1 transition" style={{ color: '#7a6d63', background: 'transparent', border: 'none' }}
+            <button onClick={onClose} aria-label="关闭菜单" className="p-1 transition" style={{ color: '#7a6d63', background: 'transparent', border: 'none' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = '#4c4037'; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#7a6d63'; }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           )}
         </div>

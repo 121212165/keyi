@@ -78,7 +78,7 @@ export default function DesensitizePanel({ onSubmit, onClose }: DesensitizePanel
             {stage === 'exposure' && '第3步：渐进暴露'}
           </span>
         </h3>
-        <button onClick={onClose} className="text-sm transition" style={{ color: "#7a6d63" }}
+        <button onClick={onClose} aria-label="关闭系统脱敏训练" className="text-sm transition" style={{ color: "#7a6d63" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#4c4037"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#7a6d63"; }}>✕</button>
       </div>
@@ -91,8 +91,9 @@ export default function DesensitizePanel({ onSubmit, onClose }: DesensitizePanel
 
       {stage === 'goal' && (
         <div className="space-y-3">
-          <p className="text-xs" style={{ color: "#7a6d63" }}>你想通过脱敏训练克服什么恐惧或焦虑？</p>
+          <label htmlFor="desens-goal" className="block text-xs" style={{ color: "#7a6d63" }}>你想通过脱敏训练克服什么恐惧或焦虑？</label>
           <input
+            id="desens-goal"
             type="text"
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
@@ -128,7 +129,7 @@ export default function DesensitizePanel({ onSubmit, onClose }: DesensitizePanel
                   <span className="w-4" style={{ color: "#7a6d63" }}>{i + 1}</span>
                   <span className="flex-1" style={{ color: "#201914" }}>{item.description}</span>
                   <span className="font-medium" style={{ color: "#2f5b4f" }}>SUD {item.sud}</span>
-                  <button onClick={() => removeItem(item.id)} className="transition" style={{ color: "#7a6d63" }}
+                  <button onClick={() => removeItem(item.id)} aria-label={`删除情境：${item.description}`} className="transition" style={{ color: "#7a6d63" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#b33a3a"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = "#7a6d63"; }}>✕</button>
                 </div>
@@ -138,8 +139,10 @@ export default function DesensitizePanel({ onSubmit, onClose }: DesensitizePanel
 
           <div className="flex gap-2">
             <input
+              id="desens-new-desc"
               type="text"
               value={newDesc}
+              aria-label="焦虑情境描述"
               onChange={(e) => setNewDesc(e.target.value)}
               placeholder="描述一个焦虑情境..."
               className="flex-1 px-3 py-2 text-sm outline-none"
@@ -149,13 +152,16 @@ export default function DesensitizePanel({ onSubmit, onClose }: DesensitizePanel
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs" style={{ color: "#7a6d63" }}>SUD:</span>
+            <label htmlFor="desens-new-sud" className="text-xs" style={{ color: "#7a6d63" }}>SUD:</label>
             <input
+              id="desens-new-sud"
               type="range"
               min={0}
               max={100}
               step={5}
               value={newSud}
+              aria-label="该情境的主观焦虑程度（SUD）"
+              aria-valuetext={`焦虑程度 ${newSud}/100`}
               onChange={(e) => setNewSud(Number(e.target.value))}
               className="flex-1"
             />
@@ -213,6 +219,8 @@ export default function DesensitizePanel({ onSubmit, onClose }: DesensitizePanel
                 max={100}
                 step={5}
                 value={currentSud}
+                aria-label="当前的主观焦虑程度（SUD）"
+                aria-valuetext={`焦虑程度 ${currentSud}/100`}
                 onChange={(e) => setCurrentSud(Number(e.target.value))}
                 className="flex-1"
               />

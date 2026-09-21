@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 import { chatAPI } from '@/lib/api';
 import { getTherapyMode } from '@/lib/therapy-modes';
+import { HOTLINES } from '@/lib/domain/crisis-reply';
 import Sidebar from './sidebar/Sidebar';
 import MessageList from './chat/MessageList';
 import ChatInput from './chat/ChatInput';
@@ -53,6 +54,7 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
   const [showTriadForm, setShowTriadForm] = useState(false);
   const [showDesensitizePanel, setShowDesensitizePanel] = useState(false);
   const [showSleepPanel, setShowSleepPanel] = useState(false);
+  const [crisisAlert, setCrisisAlert] = useState<{ level: string; keyword: string } | null>(null);
 
   const currentMode = getTherapyMode(therapyMode);
 
@@ -119,6 +121,7 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
     if (selectedSession?.therapy_mode) {
       setTherapyMode(selectedSession.therapy_mode);
     }
+    setCrisisAlert(null);
     setCurrentSession(sessionId);
     loadSessionHistory(sessionId);
   };
@@ -163,6 +166,7 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
     const userMsgId = `temp-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
 
+    setCrisisAlert(null);
     addMessage({ id: userMsgId, role: 'user', content, timestamp: new Date().toISOString() });
     addMessage({ id: assistantMsgId, role: 'assistant', content: '', timestamp: new Date().toISOString() });
     setLoading(true);
@@ -202,7 +206,13 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
         buffer = lines.pop() || '';
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          let data: { type?: string; text?: string; error?: string };
+          let data: {
+            type?: string;
+            text?: string;
+            error?: string;
+            alert_level?: string;
+            detected_keyword?: string;
+          };
           try {
             data = JSON.parse(line.slice(6));
           } catch {
@@ -211,6 +221,12 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
           if (data.type === 'delta' && data.text) {
             fullReply += data.text;
             if (!rafId) rafId = requestAnimationFrame(flushUI);
+          } else if (data.type === 'crisis') {
+            // 分级信息此前到达即被丢弃：危机文案和普通气泡长得一样，也没有可拨的号码。
+            setCrisisAlert({
+              level: (data.alert_level as string) ?? 'high',
+              keyword: (data.detected_keyword as string) ?? '',
+            });
           } else if (data.type === 'error') {
             streamError = data.error || '流读取中断';
           } else if (data.type === 'store_error') {
@@ -328,6 +344,59 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
               onSubmit={(message) => { handleSend(message); setShowSleepPanel(false); }}
               onClose={() => setShowSleepPanel(false)}
             />
+          </div>
+        )}
+
+        {/* 危机提示：分级可见，热线可一键拨打 */}
+        {crisisAlert && (
+          <div
+            role="alert"
+            style={{
+              maxWidth: 'var(--chat-max-width)',
+              margin: '0 auto',
+              width: '100%',
+              padding: '12px 16px',
+            }}
+          >
+            <div
+              style={{
+                border: `1px solid ${crisisAlert.level === 'critical' ? '#c2451f' : '#b9701f'}`,
+                borderLeftWidth: 4,
+                borderRadius: 12,
+                background: crisisAlert.level === 'critical' ? '#fdf1ec' : '#fdf6ec',
+                padding: '12px 14px',
+                color: '#4c4037',
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                {crisisAlert.level === 'critical' ? '现在最重要的是你的安全' : '我想先确认你现在是否安全'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {HOTLINES.map((hotline) => (
+                  <a
+                    key={hotline.number}
+                    href={`tel:${hotline.number.replace(/[^0-9+]/g, '')}`}
+                    style={{
+                      border: '1px solid #ded2c3',
+                      borderRadius: 9999,
+                      padding: '4px 10px',
+                      fontSize: '0.82rem',
+                      color: '#2f5b4f',
+                      background: '#fffdf8',
+                    }}
+                  >
+                    {hotline.label}：{hotline.number}
+                  </a>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCrisisAlert(null)}
+                style={{ marginTop: 8, fontSize: '0.78rem', color: '#7a6f63', background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                我已安全，继续聊天
+              </button>
+            </div>
           </div>
         )}
 

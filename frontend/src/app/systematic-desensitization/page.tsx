@@ -67,7 +67,7 @@ export default function SystematicDesensitization() {
         <p className="text-xl text-gray-600 leading-relaxed">
           系统脱敏（Systematic Desensitization）是一种通过渐进式暴露来克服恐惧和焦虑的行为治疗方法。
           由南非心理学家Joseph Wolpe在1958年提出，至今仍是治疗恐惧症和焦虑障碍的有效方法之一。
-          核心原理是：通过在放松状态下逐步接触恐惧刺激，让大脑重新学习"这个刺激不危险"。
+          核心原理是：通过在放松状态下逐步接触恐惧刺激，让大脑重新学习&ldquo;这个刺激不危险&rdquo;。
         </p>
 
         <h2>系统脱敏的三个步骤</h2>
@@ -97,7 +97,7 @@ export default function SystematicDesensitization() {
         <p>
           从焦虑等级最低的情境开始，在放松状态下想象或实际接触这个情境。
           当你在这个刺激下能保持放松时，再进入下一个等级。
-          这个过程让大脑逐渐学会"这个刺激不危险"的反应。
+          这个过程让大脑逐渐学会&ldquo;这个刺激不危险&rdquo;的反应。
         </p>
 
         <h2>系统脱敏适合治疗什么？</h2>
@@ -144,7 +144,7 @@ export default function SystematicDesensitization() {
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">系统脱敏和暴露疗法有什么区别？</h3>
-            <p className="text-gray-600">系统脱敏是暴露疗法的一种，但它是"渐进式"的——从最轻微的刺激开始，逐步增加强度。而标准暴露疗法可能直接面对最恐惧的情境。</p>
+            <p className="text-gray-600">系统脱敏是暴露疗法的一种，但它是&ldquo;渐进式&rdquo;的——从最轻微的刺激开始，逐步增加强度。而标准暴露疗法可能直接面对最恐惧的情境。</p>
           </div>
         </div>
       </section>

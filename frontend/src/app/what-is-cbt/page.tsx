@@ -80,13 +80,13 @@ export default function WhatIsCBT() {
         <h2>CBT的核心原理是什么？</h2>
         <p>
           CBT的核心假设是：不是事件本身让你痛苦，而是你对事件的解读（认知）决定了你的情绪和行为。
-          这被称为"认知三角"模型——想法、感受和行为三者相互影响。
+          这被称为&ldquo;认知三角&rdquo;模型——想法、感受和行为三者相互影响。
         </p>
         <p>
           例如，当你在会议上说错话时：
         </p>
         <ul>
-          <li><strong>想法：</strong>"我太蠢了，大家都会看不起我"（负性自动化思维）</li>
+          <li><strong>想法：</strong>&ldquo;我太蠢了，大家都会看不起我&rdquo;（负性自动化思维）</li>
           <li><strong>感受：</strong>焦虑、羞耻、沮丧</li>
           <li><strong>行为：</strong>以后不敢在会议上发言</li>
         </ul>
@@ -101,10 +101,10 @@ export default function WhatIsCBT() {
         </p>
         <p>常见的思维陷阱包括：</p>
         <ul>
-          <li><strong>灾难化：</strong>"一定会出大问题"</li>
-          <li><strong>非黑即白：</strong>"不完美就是失败"</li>
-          <li><strong>读心术：</strong>"他一定觉得我很蠢"</li>
-          <li><strong>过度概括：</strong>"我总是搞砸一切"</li>
+          <li><strong>灾难化：</strong>&ldquo;一定会出大问题&rdquo;</li>
+          <li><strong>非黑即白：</strong>&ldquo;不完美就是失败&rdquo;</li>
+          <li><strong>读心术：</strong>&ldquo;他一定觉得我很蠢&rdquo;</li>
+          <li><strong>过度概括：</strong>&ldquo;我总是搞砸一切&rdquo;</li>
         </ul>
         <p>
           识别ANTs是CBT的第一步。当你能觉察到这些自动化的思维陷阱时，你就有了选择不同想法的能力。
@@ -122,9 +122,9 @@ export default function WhatIsCBT() {
 
         <h2>CBT和普通心理咨询有什么区别？</h2>
         <p>
-          CBT更聚焦于"此时此地"的问题解决，而不是深入探索童年经历。
+          CBT更聚焦于&ldquo;此时此地&rdquo;的问题解决，而不是深入探索童年经历。
           它有明确的结构化技术，通常6-20次即可见效，而精神分析可能需要数年。
-          CBT强调"自助"——咨询师会教你方法，让你在日常生活中练习。
+          CBT强调&ldquo;自助&rdquo;——咨询师会教你方法，让你在日常生活中练习。
         </p>
 
         <h2>如何用AI辅助CBT练习？</h2>
@@ -149,7 +149,7 @@ export default function WhatIsCBT() {
           </div>
           <div className="border-b border-gray-200 pb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">CBT和普通心理咨询有什么区别？</h3>
-            <p className="text-gray-600">CBT更聚焦于"此时此地"的问题解决，而不是深入探索童年经历。它有明确的结构化技术（如认知三角记录、行为实验），通常6-20次即可见效。</p>
+            <p className="text-gray-600">CBT更聚焦于&ldquo;此时此地&rdquo;的问题解决，而不是深入探索童年经历。它有明确的结构化技术（如认知三角记录、行为实验），通常6-20次即可见效。</p>
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">CBT适合什么人？</h3>

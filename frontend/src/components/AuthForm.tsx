@@ -72,22 +72,24 @@ export default function AuthForm() {
           </h2>
 
           {error && (
-            <div style={{ background: "#fdf0ef", color: "#b33a3a" }} className="p-3 rounded-lg mb-4 text-sm">
+            <div role="alert" style={{ background: "#fdf0ef", color: "#b33a3a" }} className="p-3 rounded-lg mb-4 text-sm">
               {error}
             </div>
           )}
 
           {success && (
-            <div style={{ background: "#f0f7f0", color: "#4f8a4f" }} className="p-3 rounded-lg mb-4 text-sm">
+            <div role="alert" style={{ background: "#f0f7f0", color: "#4f8a4f" }} className="p-3 rounded-lg mb-4 text-sm">
               {success}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: "#4c4037" }}>邮箱</label>
+              <label htmlFor="auth-email" className="block text-sm font-medium mb-1" style={{ color: "#4c4037" }}>邮箱</label>
               <input
+                id="auth-email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2 rounded-lg outline-none"
@@ -100,9 +102,11 @@ export default function AuthForm() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: "#4c4037" }}>密码</label>
+              <label htmlFor="auth-password" className="block text-sm font-medium mb-1" style={{ color: "#4c4037" }}>密码</label>
               <input
+                id="auth-password"
                 type="password"
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2 rounded-lg outline-none"

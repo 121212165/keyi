@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { authenticate } from '@/lib/api-auth'
 
 export async function GET(
   req: NextRequest,
@@ -11,18 +12,9 @@ export async function GET(
       ? Math.min(Math.max(Math.trunc(limitParam), 1), 200)
       : 50
 
-    const authHeader = req.headers.get('authorization')
-
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未提供认证令牌' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-
-    const { data: userData, error: authError } = await supabaseAdmin().auth.getUser(token)
-
-    if (authError || !userData.user) {
-      return NextResponse.json({ error: '认证失败，请重新登录' }, { status: 401 })
+    const auth = await authenticate(req)
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.message }, { status: auth.status })
     }
 
     const { id } = await params
@@ -32,7 +24,7 @@ export async function GET(
       .from('chat_sessions')
       .select('id')
       .eq('id', id)
-      .eq('user_id', userData.user.id)
+      .eq('user_id', auth.userId)
       .single()
 
     if (fetchError || !session) {

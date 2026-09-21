@@ -1,10 +1,13 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
+import { authenticate } from '@/lib/api-auth'
 import { buildSystemPrompt } from '@/lib/prompts'
 import {
-  detectCrisis,
   extractAssistantArtifacts,
   getVisibleReplyFromRaw,
+  planCrisisTurn,
+  readInterview,
+  withCrisisInterview,
 } from '@/lib/chat-runtime'
 import {
   logCrisisEvent,
@@ -28,21 +31,10 @@ export async function POST(
       })
     }
 
-    const authHeader = req.headers.get('authorization')
-
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: '未提供认证令牌' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-
-    const token = authHeader.slice(7)
-    const { data: userData, error: authError } = await supabaseAdmin().auth.getUser(token)
-
-    if (authError || !userData.user) {
-      return new Response(JSON.stringify({ error: '认证失败，请重新登录' }), {
-        status: 401,
+    const auth = await authenticate(req)
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.message }), {
+        status: auth.status,
         headers: { 'Content-Type': 'application/json' },
       })
     }
@@ -51,7 +43,7 @@ export async function POST(
       .from('chat_sessions')
       .select('*')
       .eq('id', sessionId)
-      .eq('user_id', userData.user.id)
+      .eq('user_id', auth.userId)
       .single()
 
     if (sessionError || !session) {
@@ -75,16 +67,20 @@ export async function POST(
     }
     const userMessageId = userTurn.userMessageId
 
-    const crisisResult = detectCrisis(message)
+    const crisisResult = planCrisisTurn(message, readInterview(session.emotion_summary))
 
     if (crisisResult) {
-      const sessionMemory = {
-        ...(session.emotion_summary || {}),
-        therapy_mode: therapyMode,
-        last_crisis_level: crisisResult.level,
-        last_crisis_keyword: crisisResult.keyword,
-        updated_at: now,
-      }
+      const sessionMemory = withCrisisInterview(
+        {
+          ...(session.emotion_summary || {}),
+          therapy_mode: therapyMode,
+          last_crisis_level: crisisResult.level,
+          last_crisis_keyword: crisisResult.keyword,
+          last_crisis_score: crisisResult.score,
+          updated_at: now,
+        },
+        crisisResult.interview,
+      )
 
       // 危机话术必须先到达用户：落库失败只追加 store_error，不阻塞也不吞掉求助。
       let crisisStoreError: string | null = null
@@ -107,7 +103,7 @@ export async function POST(
 
       await logCrisisEvent({
         sessionId,
-        userId: userData.user.id,
+        userId: auth.userId,
         userMessage: message,
         responseGiven: crisisResult.response,
         alertLevel: crisisResult.level,
@@ -135,7 +131,7 @@ export async function POST(
     // 本轮用户消息已先落库，窗口里天然含它；反转回时间正序供模型阅读。
     const messages = [...(history || [])].reverse()
 
-    const systemPrompt = buildSystemPrompt(therapyMode)
+    const systemPrompt = buildSystemPrompt(therapyMode, session.emotion_summary)
     const llmBase = process.env.LLM_BASE_URL
     const llmKey = process.env.LLM_API_KEY
 

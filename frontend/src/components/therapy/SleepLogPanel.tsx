@@ -59,13 +59,14 @@ export default function SleepLogPanel({ onSubmit, onClose }: SleepLogPanelProps)
     <div className="p-4 mx-4 mb-2" style={{ background: '#fffdf8', border: '1px solid #ded2c3', borderRadius: '16px' }}>
       <div className="flex justify-between items-center mb-3">
         <h3 className="text-sm font-semibold" style={{ color: '#201914' }}>
-          🌙 睡眠日志
+          <span aria-hidden="true">🌙</span> 睡眠日志
           <span className="ml-2 text-xs" style={{ color: '#7a6d63' }}>
             记录昨晚的睡眠，帮可意为你制定 CBT-I 方案
           </span>
         </h3>
         <button
           onClick={onClose}
+          aria-label="关闭睡眠日志"
           className="text-xs px-2 py-1 transition"
           style={{ color: '#7a6d63', background: 'transparent', border: 'none' }}
         >
@@ -75,29 +76,32 @@ export default function SleepLogPanel({ onSubmit, onClose }: SleepLogPanelProps)
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label style={labelStyle}>就寝时间</label>
-          <input type="time" value={bedtime} onChange={(e) => setBedtime(e.target.value)} style={inputStyle} />
+          <label htmlFor="sleep-bedtime" style={labelStyle}>就寝时间</label>
+          <input id="sleep-bedtime" type="time" value={bedtime} onChange={(e) => setBedtime(e.target.value)} style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>入睡时间</label>
-          <input type="time" value={sleepTime} onChange={(e) => setSleepTime(e.target.value)} style={inputStyle} />
+          <label htmlFor="sleep-onset" style={labelStyle}>入睡时间</label>
+          <input id="sleep-onset" type="time" value={sleepTime} onChange={(e) => setSleepTime(e.target.value)} style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>夜间醒来次数</label>
-          <input type="number" min={0} max={10} value={wakeCount} onChange={(e) => setWakeCount(Math.max(0, Number(e.target.value)))} style={inputStyle} />
+          <label htmlFor="sleep-wake-count" style={labelStyle}>夜间醒来次数</label>
+          <input id="sleep-wake-count" type="number" min={0} max={10} value={wakeCount} onChange={(e) => setWakeCount(Math.max(0, Number(e.target.value)))} style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>醒着总时长（分钟）</label>
-          <input type="number" min={0} max={480} step={5} value={awakeMinutes} onChange={(e) => setAwakeMinutes(Math.max(0, Number(e.target.value)))} style={inputStyle} />
+          <label htmlFor="sleep-awake-minutes" style={labelStyle}>醒着总时长（分钟）</label>
+          <input id="sleep-awake-minutes" type="number" min={0} max={480} step={5} value={awakeMinutes} onChange={(e) => setAwakeMinutes(Math.max(0, Number(e.target.value)))} style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>起床时间</label>
-          <input type="time" value={wakeupTime} onChange={(e) => setWakeupTime(e.target.value)} style={inputStyle} />
+          <label htmlFor="sleep-wakeup" style={labelStyle}>起床时间</label>
+          <input id="sleep-wakeup" type="time" value={wakeupTime} onChange={(e) => setWakeupTime(e.target.value)} style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>白天疲劳度：{fatigue}/10</label>
+          <label htmlFor="sleep-fatigue" style={labelStyle}>白天疲劳度：{fatigue}/10</label>
           <input
+            id="sleep-fatigue"
             type="range" min={0} max={10} value={fatigue}
+            aria-label="白天疲劳度"
+            aria-valuetext={`疲劳度 ${fatigue}/10`}
             onChange={(e) => setFatigue(Number(e.target.value))}
             style={{ width: '100%', accentColor: '#5b4f8e' }}
           />
