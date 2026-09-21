@@ -6,6 +6,11 @@ import {
   extractAssistantArtifacts,
   getVisibleReplyFromRaw,
 } from '@/lib/chat-runtime'
+import {
+  logCrisisEvent,
+  recordAssistantTurn,
+  recordUserTurn,
+} from '@/lib/chat-persistence'
 
 export async function POST(
   req: Request,
@@ -57,9 +62,19 @@ export async function POST(
     }
 
     const therapyMode = session.therapy_mode || 'general'
-    const userMessageId = crypto.randomUUID()
     const assistantMessageId = crypto.randomUUID()
     const now = new Date().toISOString()
+
+    const userTurn = await recordUserTurn({ sessionId, now, message })
+    if (userTurn.error) {
+      console.error(userTurn.error)
+      return new Response(JSON.stringify({ error: '消息未能保存，请稍后重试' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    const userMessageId = userTurn.userMessageId
+
     const crisisResult = detectCrisis(message)
 
     if (crisisResult) {
@@ -71,21 +86,24 @@ export async function POST(
         updated_at: now,
       }
 
-      await persistConversation({
-        sessionId,
-        session,
-        now,
-        userMessageId,
-        assistantMessageId,
-        userMessage: message,
-        assistantReply: crisisResult.response,
-        assistantMetadata: {
-          type: 'crisis_response',
-          alert_level: crisisResult.level,
-          detected_keyword: crisisResult.keyword,
-        },
-        sessionMemory,
-      })
+      // 危机话术必须先到达用户：落库失败只追加 store_error，不阻塞也不吞掉求助。
+      let crisisStoreError: string | null = null
+      try {
+        crisisStoreError = await recordAssistantTurn({
+          sessionId,
+          now,
+          assistantMessageId,
+          content: crisisResult.response,
+          metadata: {
+            type: 'crisis_response',
+            alert_level: crisisResult.level,
+            detected_keyword: crisisResult.keyword,
+          },
+          sessionMemory,
+        })
+      } catch (error) {
+        crisisStoreError = error instanceof Error ? error.message : String(error)
+      }
 
       await logCrisisEvent({
         sessionId,
@@ -102,20 +120,20 @@ export async function POST(
         responseText: crisisResult.response,
         alertLevel: crisisResult.level,
         detectedKeyword: crisisResult.keyword,
+        storeError: crisisStoreError,
       })
     }
 
+    // ascending + limit 取的是「最早」N 条 —— 会话满 20 条后模型就再也看不到最近的对话。
     const { data: history } = await supabaseAdmin()
       .from('messages')
       .select('role, content')
       .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(20)
 
-    const messages = [
-      ...(history || []),
-      { role: 'user', content: message },
-    ]
+    // 本轮用户消息已先落库，窗口里天然含它；反转回时间正序供模型阅读。
+    const messages = [...(history || [])].reverse()
 
     const systemPrompt = buildSystemPrompt(therapyMode)
     const llmBase = process.env.LLM_BASE_URL
@@ -251,13 +269,7 @@ export async function POST(
             encoder.encode(`data: ${JSON.stringify({ type: 'error', error: '流读取中断' })}\n\n`)
           )
         } finally {
-          if (!doneSent) {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
-            )
-          }
-
-          controller.close()
+          let storeError: string | null = null
 
           try {
             const { cleanReply, metadata, sessionMemory } = extractAssistantArtifacts(
@@ -266,20 +278,33 @@ export async function POST(
               session.emotion_summary,
             )
 
-            await persistConversation({
+            storeError = await recordAssistantTurn({
               sessionId,
-              session,
               now,
-              userMessageId,
               assistantMessageId,
-              userMessage: message,
-              assistantReply: cleanReply,
-              assistantMetadata: metadata,
+              content: cleanReply,
+              metadata,
               sessionMemory,
             })
           } catch (dbError) {
             console.error('保存流式消息失败:', dbError)
+            storeError = dbError instanceof Error ? dbError.message : String(dbError)
           }
+
+          if (!doneSent) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
+            )
+          }
+
+          // 落库失败必须让用户看见：否则界面显示成功而库里什么都没有，刷新即蒸发。
+          if (storeError) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'store_error', error: storeError })}\n\n`)
+            )
+          }
+
+          controller.close()
         }
       },
     })
@@ -306,12 +331,14 @@ function createCrisisSseResponse({
   responseText,
   alertLevel,
   detectedKeyword,
+  storeError,
 }: {
   userMessageId: string
   assistantMessageId: string
   responseText: string
   alertLevel: string
   detectedKeyword: string
+  storeError: string | null
 }) {
   const stream = new ReadableStream({
     start(controller) {
@@ -328,6 +355,11 @@ function createCrisisSseResponse({
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: 'done', alert_level: alertLevel })}\n\n`)
       )
+      if (storeError) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: 'store_error', error: storeError })}\n\n`)
+        )
+      }
       controller.close()
     },
   })
@@ -341,116 +373,3 @@ function createCrisisSseResponse({
   })
 }
 
-async function persistConversation({
-  sessionId,
-  session,
-  now,
-  userMessageId,
-  assistantMessageId,
-  userMessage,
-  assistantReply,
-  assistantMetadata,
-  sessionMemory,
-}: {
-  sessionId: string
-  session: ChatSessionRecord
-  now: string
-  userMessageId: string
-  assistantMessageId: string
-  userMessage: string
-  assistantReply: string
-  assistantMetadata: Record<string, unknown>
-  sessionMemory: Record<string, unknown>
-}) {
-  const rows = [
-    {
-      id: userMessageId,
-      session_id: sessionId,
-      role: 'user',
-      content: userMessage,
-      created_at: now,
-    },
-    {
-      id: assistantMessageId,
-      session_id: sessionId,
-      role: 'assistant',
-      content: assistantReply,
-      created_at: now,
-      metadata: assistantMetadata,
-    },
-  ]
-
-  const insertResult = await supabaseAdmin().from('messages').insert(rows)
-
-  if (insertResult.error) {
-    const fallbackResult = await supabaseAdmin().from('messages').insert(
-      rows.map((row) => {
-        const fallbackRow = { ...row } as typeof row & { metadata?: Record<string, unknown> }
-        delete fallbackRow.metadata
-        return fallbackRow
-      }),
-    )
-
-    if (fallbackResult.error) {
-      throw fallbackResult.error
-    }
-  }
-
-  const updateFields: Record<string, unknown> = {
-    message_count: (session.message_count || 0) + 2,
-    updated_at: now,
-    emotion_summary: sessionMemory,
-  }
-
-  if (!session.title || session.title === '新对话') {
-    updateFields.title = userMessage.length > 20
-      ? `${userMessage.slice(0, 20)}...`
-      : userMessage
-  }
-
-  const { error: updateError } = await supabaseAdmin()
-    .from('chat_sessions')
-    .update(updateFields)
-    .eq('id', sessionId)
-
-  if (updateError) {
-    throw updateError
-  }
-}
-
-async function logCrisisEvent({
-  sessionId,
-  userId,
-  userMessage,
-  responseGiven,
-  alertLevel,
-  detectedKeyword,
-}: {
-  sessionId: string
-  userId: string
-  userMessage: string
-  responseGiven: string
-  alertLevel: string
-  detectedKeyword: string
-}) {
-  const { error } = await supabaseAdmin().from('crisis_events').insert({
-    id: crypto.randomUUID(),
-    session_id: sessionId,
-    user_id: userId,
-    alert_level: alertLevel,
-    detected_keyword: detectedKeyword,
-    user_message: userMessage,
-    response_given: responseGiven,
-    metadata: {},
-    created_at: new Date().toISOString(),
-  })
-
-  if (error) {
-    console.error('记录危机事件失败:', error)
-  }
-}
-
-interface ChatSessionRecord {
-  message_count?: number | null
-  title?: string | null
-}

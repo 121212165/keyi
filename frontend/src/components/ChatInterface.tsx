@@ -30,10 +30,11 @@ interface Session {
 
 function makeWelcome(mode: string): Message {
   return {
-    id: 'welcome',
+    // 固定 id 会在同一列表里撞 key；固定时间戳让欢迎气泡永远显示 08:00。
+    id: `welcome-${mode}-${Date.now()}`,
     role: 'assistant',
     content: getTherapyMode(mode).welcome,
-    timestamp: '2026-01-01T00:00:00.000Z',
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -184,6 +185,8 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
       let buffer = '';
       let fullReply = '';
       let rafId = 0;
+      let streamError: string | null = null;
+      let storeError: string | null = null;
 
       const flushUI = () => {
         const currentMessages = useStore.getState().messages;
@@ -198,25 +201,40 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.type === 'error') {
-                throw new Error(data.error || 'Stream failed');
-              }
-              if (data.type === 'delta' && data.text) {
-                fullReply += data.text;
-                if (!rafId) rafId = requestAnimationFrame(flushUI);
-              }
-            } catch { /* skip */ }
+          if (!line.startsWith('data: ')) continue;
+          let data: { type?: string; text?: string; error?: string };
+          try {
+            data = JSON.parse(line.slice(6));
+          } catch {
+            continue;
           }
+          if (data.type === 'delta' && data.text) {
+            fullReply += data.text;
+            if (!rafId) rafId = requestAnimationFrame(flushUI);
+          } else if (data.type === 'error') {
+            streamError = data.error || '流读取中断';
+          } else if (data.type === 'store_error') {
+            storeError = data.error || '消息未能保存';
+          }
+        }
+        if (streamError) {
+          void reader.cancel();
+          break;
         }
       }
 
       if (rafId) cancelAnimationFrame(rafId);
-      flushUI();
+
+      // 出错与落库失败都必须可见：静默留白的气泡会让用户以为是自己没发出去。
+      let finalContent = fullReply;
+      if (streamError) finalContent = fullReply || `（没能收到回复：${streamError}）请再试一次。`;
+      if (storeError) finalContent += '\n\n（这条回复没能存入历史，刷新后会丢失）';
+      setMessages(useStore.getState().messages.map(m =>
+        m.id === assistantMsgId ? { ...m, content: finalContent } : m
+      ));
       loadSessions();
-    } catch {
+    } catch (err) {
+      console.error('发送消息失败:', err);
       const msgs = useStore.getState().messages.map(m =>
         m.id === assistantMsgId ? { ...m, content: '抱歉，我遇到了一些问题。请稍后再试。' } : m
       );

@@ -39,11 +39,12 @@ export async function GET(
       return NextResponse.json({ error: '会话不存在' }, { status: 404 })
     }
 
+    // ascending + limit 会让用户打开老会话时只看到最老的 N 条；改为取最近再反转回时间正序
     const { data: messages, error: queryError } = await supabaseAdmin()
       .from('messages')
       .select('id, role, content, created_at, emotion')
       .eq('session_id', id)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(limit)
 
     if (queryError) {
@@ -51,7 +52,7 @@ export async function GET(
       return NextResponse.json({ error: '获取消息历史失败' }, { status: 500 })
     }
 
-    const formattedMessages = (messages || []).map((msg) => ({
+    const formattedMessages = (messages || []).reverse().map((msg) => ({
       id: msg.id,
       role: msg.role,
       content: msg.content,

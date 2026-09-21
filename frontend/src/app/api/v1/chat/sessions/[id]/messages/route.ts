@@ -92,15 +92,17 @@ export async function POST(
       })
     }
 
+    // ascending + limit 取的是「最早」N 条 —— 会话变长后模型就看不到最近的对话。
     const { data: history } = await supabaseAdmin()
       .from('messages')
       .select('role, content')
       .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(50)
 
+    // 本路由在模型返回后才落库，故当前这条用户消息还需自己补进上下文。
     const messages = [
-      ...(history || []),
+      ...(history || []).reverse(),
       { role: 'user', content: message },
     ]
 
