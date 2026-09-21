@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
+import type { Message, Session } from '@/store';
 import { chatAPI } from '@/lib/api';
 import { getTherapyMode } from '@/lib/therapy-modes';
 import { HOTLINES } from '@/lib/domain/crisis-reply';
@@ -12,22 +13,6 @@ import TherapyModeSelector from './therapy/TherapyModeSelector';
 import CognitiveTriadForm from './therapy/CognitiveTriadForm';
 import DesensitizePanel from './therapy/DesensitizePanel';
 import SleepLogPanel from './therapy/SleepLogPanel';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
-
-interface Session {
-  id: string;
-  title: string;
-  started_at: string;
-  updated_at?: string;
-  message_count: number;
-  therapy_mode?: string;
-}
 
 function makeWelcome(mode: string): Message {
   return {

@@ -2,13 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
+import type { Message } from '@/store';
 
 interface MessageListProps {
   messages: Message[];
