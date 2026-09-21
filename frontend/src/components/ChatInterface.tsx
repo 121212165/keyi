@@ -75,8 +75,8 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
     }
   };
 
-  const handleCreateSession = async () => {
-    if (isCreatingSession) return;
+  const handleCreateSession = async (): Promise<string | null> => {
+    if (isCreatingSession) return null;
     setIsCreatingSession(true);
     try {
       const res = await chatAPI.createSession(token ?? undefined, therapyMode);
@@ -93,9 +93,12 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
         setCurrentSession(newSession.id);
         clearMessages();
         setMessages([makeWelcome(therapyMode)]);
+        return newSession.id;
       }
+      return null;
     } catch (err) {
       console.error('创建会话失败:', err);
+      return null;
     } finally {
       setIsCreatingSession(false);
     }
@@ -140,12 +143,22 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
   };
 
   const handleSend = async (content: string) => {
-    // 串模式防护：无当前会话，或当前会话模式与所选模式不同 → 新建该模式会话
+    // 串模式防护：无当前会话，或当前会话模式与所选模式不同 → 新建该模式会话。
+    // 直接拿新建返回的 id：原先是 await 一个 100ms 的 sleep 再去 store 里抢，会抢空。
     const state = useStore.getState();
     const cur = state.sessions.find((s) => s.id === state.currentSessionId);
-    if (!cur || cur.therapy_mode !== therapyMode) {
-      await handleCreateSession();
-      await new Promise(r => setTimeout(r, 100));
+    const sid = (!cur || cur.therapy_mode !== therapyMode)
+      ? await handleCreateSession()
+      : state.currentSessionId;
+
+    if (!sid) {
+      addMessage({
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: '会话没能建立，请再发一次。',
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
     const userMsgId = `temp-${Date.now()}`;
@@ -158,9 +171,6 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-      const sid = useStore.getState().currentSessionId;
-      if (!sid) throw new Error('No session');
-
       const response = await fetch(`${API_URL}/api/v1/chat/sessions/${sid}/messages/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
