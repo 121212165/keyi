@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store';
+import type { Message, Session } from '@/store';
 import { chatAPI } from '@/lib/api';
 import { getTherapyMode } from '@/lib/therapy-modes';
+import { HOTLINES } from '@/lib/domain/crisis-reply';
 import Sidebar from './sidebar/Sidebar';
 import MessageList from './chat/MessageList';
 import ChatInput from './chat/ChatInput';
@@ -12,28 +14,13 @@ import CognitiveTriadForm from './therapy/CognitiveTriadForm';
 import DesensitizePanel from './therapy/DesensitizePanel';
 import SleepLogPanel from './therapy/SleepLogPanel';
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
-
-interface Session {
-  id: string;
-  title: string;
-  started_at: string;
-  updated_at?: string;
-  message_count: number;
-  therapy_mode?: string;
-}
-
 function makeWelcome(mode: string): Message {
   return {
-    id: 'welcome',
+    // 固定 id 会在同一列表里撞 key；固定时间戳让欢迎气泡永远显示 08:00。
+    id: `welcome-${mode}-${Date.now()}`,
     role: 'assistant',
     content: getTherapyMode(mode).welcome,
-    timestamp: '2026-01-01T00:00:00.000Z',
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -52,6 +39,7 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
   const [showTriadForm, setShowTriadForm] = useState(false);
   const [showDesensitizePanel, setShowDesensitizePanel] = useState(false);
   const [showSleepPanel, setShowSleepPanel] = useState(false);
+  const [crisisAlert, setCrisisAlert] = useState<{ level: string; keyword: string } | null>(null);
 
   const currentMode = getTherapyMode(therapyMode);
 
@@ -87,8 +75,8 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
     }
   };
 
-  const handleCreateSession = async () => {
-    if (isCreatingSession) return;
+  const handleCreateSession = async (): Promise<string | null> => {
+    if (isCreatingSession) return null;
     setIsCreatingSession(true);
     try {
       const res = await chatAPI.createSession(token ?? undefined, therapyMode);
@@ -105,9 +93,12 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
         setCurrentSession(newSession.id);
         clearMessages();
         setMessages([makeWelcome(therapyMode)]);
+        return newSession.id;
       }
+      return null;
     } catch (err) {
       console.error('创建会话失败:', err);
+      return null;
     } finally {
       setIsCreatingSession(false);
     }
@@ -118,6 +109,7 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
     if (selectedSession?.therapy_mode) {
       setTherapyMode(selectedSession.therapy_mode);
     }
+    setCrisisAlert(null);
     setCurrentSession(sessionId);
     loadSessionHistory(sessionId);
   };
@@ -151,26 +143,34 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
   };
 
   const handleSend = async (content: string) => {
-    // 串模式防护：无当前会话，或当前会话模式与所选模式不同 → 新建该模式会话
+    // 串模式防护：无当前会话，或当前会话模式与所选模式不同 → 新建该模式会话。
+    // 直接拿新建返回的 id：原先是 await 一个 100ms 的 sleep 再去 store 里抢，会抢空。
     const state = useStore.getState();
     const cur = state.sessions.find((s) => s.id === state.currentSessionId);
-    if (!cur || cur.therapy_mode !== therapyMode) {
-      await handleCreateSession();
-      await new Promise(r => setTimeout(r, 100));
+    const sid = (!cur || cur.therapy_mode !== therapyMode)
+      ? await handleCreateSession()
+      : state.currentSessionId;
+
+    if (!sid) {
+      addMessage({
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: '会话没能建立，请再发一次。',
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
     const userMsgId = `temp-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
 
+    setCrisisAlert(null);
     addMessage({ id: userMsgId, role: 'user', content, timestamp: new Date().toISOString() });
     addMessage({ id: assistantMsgId, role: 'assistant', content: '', timestamp: new Date().toISOString() });
     setLoading(true);
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-      const sid = useStore.getState().currentSessionId;
-      if (!sid) throw new Error('No session');
-
       const response = await fetch(`${API_URL}/api/v1/chat/sessions/${sid}/messages/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
@@ -184,6 +184,8 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
       let buffer = '';
       let fullReply = '';
       let rafId = 0;
+      let streamError: string | null = null;
+      let storeError: string | null = null;
 
       const flushUI = () => {
         const currentMessages = useStore.getState().messages;
@@ -198,25 +200,52 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.type === 'error') {
-                throw new Error(data.error || 'Stream failed');
-              }
-              if (data.type === 'delta' && data.text) {
-                fullReply += data.text;
-                if (!rafId) rafId = requestAnimationFrame(flushUI);
-              }
-            } catch { /* skip */ }
+          if (!line.startsWith('data: ')) continue;
+          let data: {
+            type?: string;
+            text?: string;
+            error?: string;
+            alert_level?: string;
+            detected_keyword?: string;
+          };
+          try {
+            data = JSON.parse(line.slice(6));
+          } catch {
+            continue;
           }
+          if (data.type === 'delta' && data.text) {
+            fullReply += data.text;
+            if (!rafId) rafId = requestAnimationFrame(flushUI);
+          } else if (data.type === 'crisis') {
+            // 分级信息此前到达即被丢弃：危机文案和普通气泡长得一样，也没有可拨的号码。
+            setCrisisAlert({
+              level: (data.alert_level as string) ?? 'high',
+              keyword: (data.detected_keyword as string) ?? '',
+            });
+          } else if (data.type === 'error') {
+            streamError = data.error || '流读取中断';
+          } else if (data.type === 'store_error') {
+            storeError = data.error || '消息未能保存';
+          }
+        }
+        if (streamError) {
+          void reader.cancel();
+          break;
         }
       }
 
       if (rafId) cancelAnimationFrame(rafId);
-      flushUI();
+
+      // 出错与落库失败都必须可见：静默留白的气泡会让用户以为是自己没发出去。
+      let finalContent = fullReply;
+      if (streamError) finalContent = fullReply || `（没能收到回复：${streamError}）请再试一次。`;
+      if (storeError) finalContent += '\n\n（这条回复没能存入历史，刷新后会丢失）';
+      setMessages(useStore.getState().messages.map(m =>
+        m.id === assistantMsgId ? { ...m, content: finalContent } : m
+      ));
       loadSessions();
-    } catch {
+    } catch (err) {
+      console.error('发送消息失败:', err);
       const msgs = useStore.getState().messages.map(m =>
         m.id === assistantMsgId ? { ...m, content: '抱歉，我遇到了一些问题。请稍后再试。' } : m
       );
@@ -310,6 +339,59 @@ export default function ChatInterface({ initialMode = 'general' }: { initialMode
               onSubmit={(message) => { handleSend(message); setShowSleepPanel(false); }}
               onClose={() => setShowSleepPanel(false)}
             />
+          </div>
+        )}
+
+        {/* 危机提示：分级可见，热线可一键拨打 */}
+        {crisisAlert && (
+          <div
+            role="alert"
+            style={{
+              maxWidth: 'var(--chat-max-width)',
+              margin: '0 auto',
+              width: '100%',
+              padding: '12px 16px',
+            }}
+          >
+            <div
+              style={{
+                border: `1px solid ${crisisAlert.level === 'critical' ? '#c2451f' : '#b9701f'}`,
+                borderLeftWidth: 4,
+                borderRadius: 12,
+                background: crisisAlert.level === 'critical' ? '#fdf1ec' : '#fdf6ec',
+                padding: '12px 14px',
+                color: '#4c4037',
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                {crisisAlert.level === 'critical' ? '现在最重要的是你的安全' : '我想先确认你现在是否安全'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {HOTLINES.map((hotline) => (
+                  <a
+                    key={hotline.number}
+                    href={`tel:${hotline.number.replace(/[^0-9+]/g, '')}`}
+                    style={{
+                      border: '1px solid #ded2c3',
+                      borderRadius: 9999,
+                      padding: '4px 10px',
+                      fontSize: '0.82rem',
+                      color: '#2f5b4f',
+                      background: '#fffdf8',
+                    }}
+                  >
+                    {hotline.label}：{hotline.number}
+                  </a>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCrisisAlert(null)}
+                style={{ marginTop: 8, fontSize: '0.78rem', color: '#7a6f63', background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                我已安全，继续聊天
+              </button>
+            </div>
           </div>
         )}
 

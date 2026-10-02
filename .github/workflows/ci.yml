@@ -1,7 +1,7 @@
 name: CI Pipeline
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, refactor]
   pull_request:
     branches: [main, master]
 
@@ -19,5 +19,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm test
+      - run: node ../scripts/no-dead-exports.mjs
+        name: 死导出基线（非阻断）
+        continue-on-error: true
       - run: npm run lint
       - run: npm run build

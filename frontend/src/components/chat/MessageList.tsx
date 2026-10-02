@@ -2,13 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
+import type { Message } from '@/store';
 
 interface MessageListProps {
   messages: Message[];
@@ -30,9 +24,9 @@ export default function MessageList({ messages, loading }: MessageListProps) {
         ))}
 
         {loading && (
-          <div className="flex justify-start">
+          <div className="flex justify-start" role="status" aria-label="可意正在输入">
             <div className="px-4 py-3" style={{ background: '#fffdf8', borderRadius: '16px 16px 16px 4px', border: '1px solid #ded2c3' }}>
-              <div className="flex space-x-1.5">
+              <div className="flex space-x-1.5" aria-hidden="true">
                 <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#9b5b32', opacity: 0.5 }} />
                 <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#9b5b32', opacity: 0.5, animationDelay: '75ms' }} />
                 <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#9b5b32', opacity: 0.5, animationDelay: '150ms' }} />

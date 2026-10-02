@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { authenticate } from '@/lib/api-auth'
 import crypto from 'crypto'
 
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization')
-
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未提供认证令牌' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-
-    const { data: userData, error: authError } = await supabaseAdmin().auth.getUser(token)
-
-    if (authError || !userData.user) {
-      return NextResponse.json({ error: '认证失败，请重新登录' }, { status: 401 })
+    const auth = await authenticate(req)
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.message }, { status: auth.status })
     }
 
     const body = await req.json().catch(() => ({}))
@@ -28,7 +20,7 @@ export async function POST(req: NextRequest) {
       .from('chat_sessions')
       .insert({
         id: sessionId,
-        user_id: userData.user.id,
+        user_id: auth.userId,
         title: '新对话',
         started_at: now,
         updated_at: now,
@@ -54,24 +46,15 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization')
-
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未提供认证令牌' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-
-    const { data: userData, error: authError } = await supabaseAdmin().auth.getUser(token)
-
-    if (authError || !userData.user) {
-      return NextResponse.json({ error: '认证失败，请重新登录' }, { status: 401 })
+    const auth = await authenticate(req)
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.message }, { status: auth.status })
     }
 
     const { data: sessions, error: queryError } = await supabaseAdmin()
       .from('chat_sessions')
       .select('id, title, started_at, updated_at, message_count, therapy_mode')
-      .eq('user_id', userData.user.id)
+      .eq('user_id', auth.userId)
       .order('started_at', { ascending: false })
 
     if (queryError) {

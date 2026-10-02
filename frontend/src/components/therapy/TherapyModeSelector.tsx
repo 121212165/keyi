@@ -26,12 +26,14 @@ export default function TherapyModeSelector({ selectedMode, onSelect }: TherapyM
   return (
     <>
       {/* PC: tab bar */}
-      <div className="hidden md:flex items-center gap-0 px-4 pt-3 pb-0" style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%' }}>
+      <div role="tablist" aria-label="心理模式" className="hidden md:flex items-center gap-0 px-4 pt-3 pb-0" style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%' }}>
         {THERAPY_MODES.map((mode) => {
           const isActive = selectedMode === mode.id;
           return (
             <button
               key={mode.id}
+              role="tab"
+              aria-selected={isActive}
               onClick={() => onSelect(mode.id)}
               className="relative px-4 py-2 text-sm transition"
               style={{
@@ -44,10 +46,11 @@ export default function TherapyModeSelector({ selectedMode, onSelect }: TherapyM
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#7a6d63'; }}
               title={mode.description}
             >
-              <span className="mr-1.5">{mode.icon}</span>
+              <span className="mr-1.5" aria-hidden="true">{mode.icon}</span>
               {mode.name}
+              <span className="sr-only">：{mode.description}</span>
               {isActive && (
-                <div style={{ position: 'absolute', bottom: 0, left: '16px', right: '16px', height: '3px', background: '#2f5b4f', borderRadius: '2px 2px 0 0' }} />
+                <div aria-hidden="true" style={{ position: 'absolute', bottom: 0, left: '16px', right: '16px', height: '3px', background: '#2f5b4f', borderRadius: '2px 2px 0 0' }} />
               )}
             </button>
           );
@@ -55,25 +58,34 @@ export default function TherapyModeSelector({ selectedMode, onSelect }: TherapyM
       </div>
 
       {/* Mobile: dropdown in top bar (rendered by ChatInterface) */}
-      <div className="md:hidden relative" ref={dropdownRef}>
+      <div
+        className="md:hidden relative"
+        ref={dropdownRef}
+        onKeyDown={(e) => { if (e.key === 'Escape') setDropdownOpen(false); }}
+      >
         <button
           onClick={() => setDropdownOpen(!dropdownOpen)}
+          aria-haspopup="listbox"
+          aria-expanded={dropdownOpen}
           className="flex items-center gap-1 px-3 py-1.5 text-sm transition"
           style={{ background: '#f1e3cf', color: '#4c4037', borderRadius: '8px', border: 'none' }}
         >
-          <span>{current.icon}</span>
+          <span className="sr-only">选择心理模式：</span>
+          <span aria-hidden="true">{current.icon}</span>
           <span>{current.shortName}</span>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: '150ms' }}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: '150ms' }}>
             <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
         {dropdownOpen && (
-          <div className="mode-dropdown">
+          <div className="mode-dropdown" role="listbox" aria-label="心理模式">
             {THERAPY_MODES.map((mode) => {
               const isActive = selectedMode === mode.id;
               return (
                 <button
                   key={mode.id}
+                  role="option"
+                  aria-selected={isActive}
                   onClick={() => { onSelect(mode.id); setDropdownOpen(false); }}
                   className="w-full flex items-center gap-2 px-4 py-3 text-sm text-left transition"
                   style={{
@@ -85,7 +97,7 @@ export default function TherapyModeSelector({ selectedMode, onSelect }: TherapyM
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = '#f1e3cf'; }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <span>{mode.icon}</span>
+                  <span aria-hidden="true">{mode.icon}</span>
                   <div>
                     <div>{mode.name}</div>
                     <div className="text-xs" style={{ color: '#7a6d63' }}>{mode.description}</div>

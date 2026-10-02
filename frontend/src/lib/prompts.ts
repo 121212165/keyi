@@ -161,15 +161,53 @@ sleep_efficiency: 0-1 的小数（有数据时）
 sleep_window_min: 建议卧床窗口（分钟，有数据时）
 awake_count: 夜间醒来次数（有数据时）`
 
-export function buildSystemPrompt(therapyMode: string): string {
-  switch (therapyMode) {
-    case 'cbt':
-      return `${BASE_PROMPT}\n\n${CBT_PROMPT}`
-    case 'desensitize':
-      return `${BASE_PROMPT}\n\n${DESENSITIZE_PROMPT}`
-    case 'sleep':
-      return `${BASE_PROMPT}\n\n${SLEEP_PROMPT}`
-    default:
-      return BASE_PROMPT
+/**
+ * 会话记忆 → prompt 简报。这些字段一直只写不读，导致每次新会话都从零开始。
+ * 只给结构化事实、不给原文与日期，并要求模型自然使用而非复述（手册 §6.2 的「✅自然调用 / ❌机械复述」）。
+ */
+export function buildMemoryBrief(summary: Record<string, unknown> | null | undefined): string {
+  if (typeof summary !== 'object' || summary === null) return ''
+
+  const lines: string[] = []
+  const push = (label: string, value: unknown) => {
+    if (typeof value === 'string' && value.trim()) lines.push(`- ${label}：${value.trim()}`)
+    else if (typeof value === 'number' && Number.isFinite(value)) lines.push(`- ${label}：${value}`)
+    else if (Array.isArray(value) && value.length) {
+      const items = value.filter((item) => typeof item === 'string' && item.trim()).join('、')
+      if (items) lines.push(`- ${label}：${items}`)
+    }
   }
+
+  push('上次记录到的情绪状态', summary.emotional_state)
+  push('咨询推进阶段', summary.current_phase)
+  push('当前练习阶段', summary.stage)
+  push('当前暴露层级', summary.current_level)
+  push('主观焦虑程度 SUD（0-100）', summary.sud_score)
+  push('睡眠效率', summary.sleep_efficiency)
+  push('卧床窗口（分钟）', summary.sleep_window_min)
+  push('夜间醒来次数', summary.awake_count)
+  push('反复出现的思维陷阱', summary.cognitive_distortions)
+  push('最近一次危机信号等级', summary.last_crisis_level)
+
+  if (lines.length === 0) return ''
+
+  return `关于这位来访者，以下是既往对话中记录到的信息。请使用它们保持连续性（例如自然地接上上次的话题），但**不要**逐条复述、不要提及“记录”“字段”“日期”，那会让人觉得自己被档案化：
+${lines.join('\n')}`
+}
+
+export function buildSystemPrompt(
+  therapyMode: string,
+  memory?: Record<string, unknown> | null,
+): string {
+  const brief = buildMemoryBrief(memory)
+  const modePrompt =
+    therapyMode === 'cbt'
+      ? `${BASE_PROMPT}\n\n${CBT_PROMPT}`
+      : therapyMode === 'desensitize'
+        ? `${BASE_PROMPT}\n\n${DESENSITIZE_PROMPT}`
+        : therapyMode === 'sleep'
+          ? `${BASE_PROMPT}\n\n${SLEEP_PROMPT}`
+          : BASE_PROMPT
+
+  return brief ? `${modePrompt}\n\n${brief}` : modePrompt
 }

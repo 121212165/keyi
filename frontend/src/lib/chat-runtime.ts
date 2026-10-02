@@ -1,9 +1,24 @@
-export type CrisisLevel = 'low' | 'medium' | 'high' | 'critical'
+import { detectRisk, type RiskLevel } from './domain/detect-risk'
+import { crisisReplyFor, crisisReplyForLevel } from './domain/crisis-reply'
+import {
+  advanceInterview,
+  interviewLevel,
+  interviewQuestion,
+  parseAnswer,
+  startInterview,
+  type InterviewState,
+  type InterviewStep,
+} from './domain/interview'
+
+export type CrisisLevel = RiskLevel
 
 export interface CrisisDetectionResult {
   level: CrisisLevel
   keyword: string
   response: string
+  score: number
+  /** 进行中的五问访谈进度；null 表示本轮之后没有待问的问题 */
+  interview: InterviewState | null
 }
 
 export interface AssistantArtifacts {
@@ -12,48 +27,95 @@ export interface AssistantArtifacts {
   sessionMemory: Record<string, unknown>
 }
 
-const CRISIS_KEYWORDS: Array<{ keyword: string; level: CrisisLevel; response: string }> = [
-  {
-    keyword: '自杀',
-    level: 'critical',
-    response:
-      '我听到你提到了自杀，这让我非常担心你当前的安全。如果你现在有伤害自己的打算，请立刻联系当地紧急救援，或尽快联系可信任的家人朋友陪在你身边。\n\n你也可以马上联系心理援助资源：\n- 全国心理援助热线：400-161-9995\n- 北京心理危机干预中心：010-8295-1332\n\n如果你愿意，也可以直接告诉我：你现在是否一个人？身边有没有可以马上联系的人？',
-  },
-  {
-    keyword: '不想活',
-    level: 'high',
-    response:
-      '听到你说“不想活”，我很在意你现在的状态。此刻最重要的是先确保你不是一个人承受。请尽快联系一位可信任的人陪着你，并考虑立即拨打心理援助热线或当地急救电话。\n\n如果你愿意，可以先告诉我：你现在是否安全？身边有没有可以立刻联系的人？',
-  },
-  {
-    keyword: '活不下去',
-    level: 'high',
-    response:
-      '你说“活不下去”，说明你现在可能非常痛苦。先把安全放在第一位：请尽量不要独处，联系家人、朋友或其他可信任的人陪着你。必要时请立刻联系当地急救或心理危机热线。\n\n如果你愿意，我可以先陪你一起把眼前最紧急的一步确认下来。',
-  },
-  {
-    keyword: '伤害自己',
-    level: 'high',
-    response:
-      '听到你提到伤害自己，我很担心你现在的安全。请先把可能伤害到自己的物品移开，并尽快联系一位可信任的人陪在你身边；如果风险正在升高，请立即拨打当地急救电话或心理援助热线。\n\n你愿意告诉我，你现在是否处在安全的环境里吗？',
-  },
+const INTERVIEW_STEPS: InterviewStep[] = [
+  'screening',
+  'frequency',
+  'plan',
+  'preparation',
+  'timeframe',
+  'done',
 ]
 
-const THERAPY_TAGS = ['THERAPY_RECORD', 'DESENSITIZE_RECORD', 'SLEEP_RECORD'] as const
+/** emotion_summary 是 JSONB，读回来的形状不可信，逐字段校验后才恢复访谈进度。 */
+export function readInterview(summary: Record<string, unknown> | null | undefined): InterviewState | null {
+  const raw = summary?.crisis_interview
+  if (typeof raw !== 'object' || raw === null) return null
 
-export function detectCrisis(message: string): CrisisDetectionResult | null {
-  for (const item of CRISIS_KEYWORDS) {
-    if (message.includes(item.keyword)) {
-      return {
-        level: item.level,
-        keyword: item.keyword,
-        response: item.response,
-      }
+  const candidate = raw as { step?: unknown; answers?: unknown }
+  if (typeof candidate.step !== 'string' || !INTERVIEW_STEPS.includes(candidate.step as InterviewStep)) return null
+  if (candidate.step === 'done') return null
+  if (typeof candidate.answers !== 'object' || candidate.answers === null) return null
+
+  const answers: InterviewState['answers'] = {}
+  for (const [step, value] of Object.entries(candidate.answers)) {
+    if (value === 'yes' || value === 'no' || value === 'unsure') {
+      answers[step as InterviewStep] = value
     }
   }
 
-  return null
+  return { step: candidate.step as InterviewStep, answers }
 }
+
+export function withCrisisInterview(
+  summary: Record<string, unknown>,
+  interview: InterviewState | null,
+): Record<string, unknown> {
+  const next = { ...summary }
+  if (interview) next.crisis_interview = interview
+  else delete next.crisis_interview
+  return next
+}
+
+/**
+ * 每轮用户消息先过这里。命中即短路：不调模型，直接给分级危机回应。
+ * high 级会开启（或继续）手册 §7.2 的五问——只有问到“计划/准备/时间意图”才允许升级为 critical。
+ */
+export function planCrisisTurn(
+  message: string,
+  saved: InterviewState | null,
+): CrisisDetectionResult | null {
+  if (saved) {
+    const answer = parseAnswer(message) ?? 'unsure'
+    const next = advanceInterview(saved, answer)
+    const level = interviewLevel(next)
+    const question = interviewQuestion(next)
+
+    if (question) {
+      return { level, keyword: 'crisis_interview', response: question, score: 0, interview: next }
+    }
+
+    // 访谈结论为低风险时不再占位回答，交回正常对话，避免把用户困在危机问答里。
+    if (level === 'low') return null
+    return {
+      level,
+      keyword: 'crisis_interview',
+      response: crisisReplyForLevel(level),
+      score: 0,
+      interview: null,
+    }
+  }
+
+  const assessment = detectRisk(message)
+  if (assessment.level === 'low') return null
+
+  const keyword = assessment.hits[0]?.term ?? '危机信号'
+  // 命中本身已构成第一问（是否存在意念）的肯定证据，所以从频率问起。
+  const interview = assessment.level === 'high' ? advanceInterview(startInterview(), 'yes') : null
+
+  return {
+    level: assessment.level,
+    keyword,
+    response: crisisReplyFor(assessment),
+    score: assessment.score,
+    interview,
+  }
+}
+
+export function detectCrisis(message: string): CrisisDetectionResult | null {
+  return planCrisisTurn(message, null)
+}
+
+const THERAPY_TAGS = ['THERAPY_RECORD', 'DESENSITIZE_RECORD', 'SLEEP_RECORD'] as const
 
 export function getVisibleReplyFromRaw(rawReply: string): string {
   const indexes = THERAPY_TAGS
@@ -131,6 +193,9 @@ function buildSessionMemory(
     therapy_mode: therapyMode,
     updated_at: new Date().toISOString(),
   }
+
+  // 能走到普通回复，说明危机访谈已让位于正常对话；留着它会把用户锁在问卷里。
+  delete nextSummary.crisis_interview
 
   if (typeof metadata.emotional_state === 'string' && metadata.emotional_state.trim()) {
     nextSummary.emotional_state = metadata.emotional_state

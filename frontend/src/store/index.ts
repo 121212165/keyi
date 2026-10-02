@@ -2,14 +2,16 @@
 
 import { create } from 'zustand';
 
-interface Message {
+// 全仓此前有 6 份手写的 Message/Session/User 定义，改一处漏五处；统一从这里取。
+export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  metadata?: Record<string, unknown>;
 }
 
-interface Session {
+export interface Session {
   id: string;
   title: string;
   started_at: string;
@@ -18,7 +20,7 @@ interface Session {
   therapy_mode?: string;
 }
 
-interface User {
+export interface User {
   id: string;
   email: string;
 }

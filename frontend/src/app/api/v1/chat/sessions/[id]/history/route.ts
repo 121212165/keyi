@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { authenticate } from '@/lib/api-auth'
 
 export async function GET(
   req: NextRequest,
@@ -11,18 +12,9 @@ export async function GET(
       ? Math.min(Math.max(Math.trunc(limitParam), 1), 200)
       : 50
 
-    const authHeader = req.headers.get('authorization')
-
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未提供认证令牌' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-
-    const { data: userData, error: authError } = await supabaseAdmin().auth.getUser(token)
-
-    if (authError || !userData.user) {
-      return NextResponse.json({ error: '认证失败，请重新登录' }, { status: 401 })
+    const auth = await authenticate(req)
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.message }, { status: auth.status })
     }
 
     const { id } = await params
@@ -32,18 +24,21 @@ export async function GET(
       .from('chat_sessions')
       .select('id')
       .eq('id', id)
-      .eq('user_id', userData.user.id)
+      .eq('user_id', auth.userId)
       .single()
 
     if (fetchError || !session) {
       return NextResponse.json({ error: '会话不存在' }, { status: 404 })
     }
 
+    // ascending + limit 会让用户打开老会话时只看到最老的 N 条；改为取最近再反转回时间正序
+    // emotion 是从未写入过的僵尸列；CBT/SUD/睡眠记录一直在 metadata 里，但这里从不 select，
+    // 导致用户永远看不到自己做过的治疗记录。
     const { data: messages, error: queryError } = await supabaseAdmin()
       .from('messages')
-      .select('id, role, content, created_at, emotion')
+      .select('id, role, content, created_at, metadata')
       .eq('session_id', id)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(limit)
 
     if (queryError) {
@@ -51,12 +46,12 @@ export async function GET(
       return NextResponse.json({ error: '获取消息历史失败' }, { status: 500 })
     }
 
-    const formattedMessages = (messages || []).map((msg) => ({
+    const formattedMessages = (messages || []).reverse().map((msg) => ({
       id: msg.id,
       role: msg.role,
       content: msg.content,
       timestamp: msg.created_at,
-      emotion: msg.emotion,
+      metadata: msg.metadata ?? {},
     }))
 
     return NextResponse.json(formattedMessages)

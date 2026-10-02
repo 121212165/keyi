@@ -102,7 +102,7 @@ export default function Home() {
               style={{ background: mode.gradient, borderRadius: '20px', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
             >
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-3xl" style={{ lineHeight: 1 }}>{mode.icon}</span>
+                <span className="text-3xl" style={{ lineHeight: 1 }} aria-hidden="true">{mode.icon}</span>
                 <div>
                   <div className="text-lg font-semibold" style={{ color: '#201914' }}>{mode.name}</div>
                   <div className="text-sm" style={{ color: mode.color }}>{mode.tagline}</div>
@@ -112,7 +112,7 @@ export default function Home() {
               <ul className="space-y-1.5 mb-5">
                 {mode.features.map((f) => (
                   <li key={f} className="flex items-start gap-2 text-sm" style={{ color: '#4c4037' }}>
-                    <span style={{ color: mode.color }}>✓</span>
+                    <span style={{ color: mode.color }} aria-hidden="true">✓</span>
                     <span>{f}</span>
                   </li>
                 ))}
@@ -131,7 +131,7 @@ export default function Home() {
 
       {/* 免责声明 */}
       <footer className="px-6 pb-12 text-center" style={{ maxWidth: '720px', margin: '0 auto' }}>
-        <div className="text-xs leading-relaxed" style={{ color: '#9a8f85' }}>
+        <div className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
           可意AI是心理健康辅助工具，不能替代专业心理咨询师或精神科医生的诊断和治疗。
           如遇严重心理困扰或自伤念头，请立即联系：
           <br />

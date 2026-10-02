@@ -39,9 +39,22 @@ function relativeTime(dateStr: string): string {
 }
 
 export default function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
+  const title = getSessionTitle(session);
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-current={isActive ? 'true' : undefined}
+      aria-label={`打开对话：${title}`}
       onClick={() => onSelect(session.id)}
+      onKeyDown={(e) => {
+        // 内层按钮的按键会冒泡到这里，只在条目自身聚焦时响应
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(session.id);
+        }
+      }}
       className="p-3 rounded-lg cursor-pointer transition group"
       style={{
         background: isActive ? "rgba(47,91,79,0.08)" : "transparent",
@@ -53,16 +66,17 @@ export default function SessionItem({ session, isActive, onSelect, onDelete }: S
     >
       <div className="flex justify-between items-start">
         <span className="text-sm font-medium truncate flex-1" style={{ color: "#201914" }}>
-          {getSessionTitle(session)}
+          {title}
         </span>
         <button
           onClick={(e) => onDelete(e, session.id)}
-          className="opacity-0 group-hover:opacity-100 transition"
+          aria-label={`删除对话：${title}`}
+          className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition"
           style={{ color: "#7a6d63" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#b33a3a"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#7a6d63"; }}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>

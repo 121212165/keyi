@@ -39,7 +39,7 @@ export default function CognitiveTriadForm({ onSubmit, onClose }: CognitiveTriad
     <div className="p-4 mx-4 mb-2" style={{ background: "#fffdf8", border: "1px solid #ded2c3", borderRadius: "16px" }}>
       <div className="flex justify-between items-center mb-3">
         <h3 className="text-sm font-semibold" style={{ color: "#201914" }}>记录认知三角</h3>
-        <button onClick={onClose} className="text-sm transition" style={{ color: "#7a6d63" }}
+        <button onClick={onClose} aria-label="关闭认知三角记录" className="text-sm transition" style={{ color: "#7a6d63" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#4c4037"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#7a6d63"; }}>
           ✕
@@ -48,10 +48,11 @@ export default function CognitiveTriadForm({ onSubmit, onClose }: CognitiveTriad
 
       <div className="space-y-3">
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "#7a6d63" }}>
+          <label htmlFor="triad-thought" className="text-xs mb-1 block" style={{ color: "#7a6d63" }}>
             当时脑子里闪过了什么念头？
           </label>
           <textarea
+            id="triad-thought"
             value={thought}
             onChange={(e) => setThought(e.target.value)}
             placeholder="例如：我觉得自己又搞砸了..."
@@ -64,16 +65,17 @@ export default function CognitiveTriadForm({ onSubmit, onClose }: CognitiveTriad
         </div>
 
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "#7a6d63" }}>
+          <span id="triad-emotions-label" className="text-xs mb-1 block" style={{ color: "#7a6d63" }}>
             你感觉到了什么情绪？（可多选）
-          </label>
-          <div className="flex flex-wrap gap-1.5">
+          </span>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="triad-emotions-label">
             {EMOTION_OPTIONS.map((feeling) => {
               const isSelected = selectedFeelings.includes(feeling);
               return (
                 <button
                   key={feeling}
                   onClick={() => toggleFeeling(feeling)}
+                  aria-pressed={isSelected}
                   className="px-2.5 py-1 text-xs transition"
                   style={{
                     borderRadius: "9999px",
@@ -90,10 +92,11 @@ export default function CognitiveTriadForm({ onSubmit, onClose }: CognitiveTriad
         </div>
 
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "#7a6d63" }}>
+          <label htmlFor="triad-behavior" className="text-xs mb-1 block" style={{ color: "#7a6d63" }}>
             你当时做了什么？
           </label>
           <input
+            id="triad-behavior"
             type="text"
             value={behavior}
             onChange={(e) => setBehavior(e.target.value)}
